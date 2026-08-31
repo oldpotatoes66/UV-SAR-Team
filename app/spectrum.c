@@ -1140,13 +1140,22 @@ uint8_t Rssi2Y(uint16_t rssi)
 
 static void DrawStatus()
 {
-#ifdef SPECTRUM_EXTRA_VALUES
-    sprintf(String, "%d/%d P:%d T:%d", settings.dbMin, settings.dbMax,
-            Rssi2DBm(peak.rssi), Rssi2DBm(settings.rssiTriggerLevel));
-#else
-    sprintf(String, "%d/%d", settings.dbMin, settings.dbMax);
+#ifdef ENABLE_FOX_MODE
+    if (foxMode) {
+        sprintf(String, "%u.%05u", currentFreq / 100000,
+                currentFreq % 100000);
+        GUI_DisplaySmallest(String, 0, 1, true, true);
+    } else
 #endif
-    GUI_DisplaySmallest(String, 0, 1, true, true);
+    {
+#ifdef SPECTRUM_EXTRA_VALUES
+        sprintf(String, "%d/%d P:%d T:%d", settings.dbMin, settings.dbMax,
+                Rssi2DBm(peak.rssi), Rssi2DBm(settings.rssiTriggerLevel));
+#else
+        sprintf(String, "%d/%d", settings.dbMin, settings.dbMax);
+#endif
+        GUI_DisplaySmallest(String, 0, 1, true, true);
+    }
 
     BOARD_ADC_GetBatteryInfo(&gBatteryVoltages[gBatteryCheckCounter++ % 4],
                              &gBatteryCurrent);
@@ -1588,28 +1597,25 @@ static void RenderStill()
 {
 #ifdef ENABLE_FOX_MODE
     if (foxMode && !menuState) {
-        static const char *gainName[] = {"AUTO-HI", "AUTO-LOW", "AUTO-MIN"};
+        static const char *gainName[] = {"HI", "LOW", "MIN"};
         int dbm = FoxCorrectedDBm(scanInfo.rssi);
         int score = clamp((dbm + 120) * 100 / 80, 0, 100);
         uint8_t meterWidth = score * 118 / 100;
+        const char *trend = foxTrend > 0 ? "UP" :
+                            (foxTrend < 0 ? "DOWN" : "HOLD");
 
-        sprintf(String, "SAR %s", gainName[foxGain]);
-        UI_PrintString(String, 0, 127, 0, 8);
+        sprintf(String, "SAR %s %d%% %s", gainName[foxGain], score, trend);
+        UI_PrintStringSmallBold(String, 0, 127, 0);
         sprintf(String, "%4d", dbm);
-        UI_DisplayFrequency(String, 29, 1, false);
-        UI_PrintString("dBm", 94, 127, 2, 8);
+        UI_DisplayFrequency(String, 24, 1, false);
+        UI_PrintStringSmallBold("dBm", 91, 127, 2);
 
-        UI_DrawRectangleBuffer(gFrameBuffer, 3, 27, 124, 42, true);
+        UI_DrawRectangleBuffer(gFrameBuffer, 3, 28, 124, 46, true);
         for (uint8_t i = 0; i < meterWidth; i++)
-            UI_DrawLineBuffer(gFrameBuffer, 5 + i, 29, 5 + i, 40, true);
+            UI_DrawLineBuffer(gFrameBuffer, 5 + i, 30, 5 + i, 44, true);
 
         if (foxPeakResetTicks)
-            UI_PrintString("PEAK RESET", 0, 127, 6, 8);
-        else {
-            const char *trend = foxTrend > 0 ? "UP" : (foxTrend < 0 ? "DOWN" : "STABLE");
-            sprintf(String, "%3d%% %s", score, trend);
-            UI_PrintString(String, 0, 127, 6, 8);
-        }
+            UI_PrintStringSmallBold("RESET", 72, 127, 5);
         return;
     }
 #endif
