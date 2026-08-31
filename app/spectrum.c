@@ -77,13 +77,15 @@ static uint8_t foxGainTriggerCount = 0;
 static bool foxSoundEnabled = true;
 static uint8_t foxSoundCounter = 0;
 typedef enum {
+    FOX_SIGNAL_CAL,
     FOX_SIGNAL_LOST,
     FOX_SIGNAL_WAIT,
     FOX_SIGNAL_TARGET,
 } FoxSignalState;
-static FoxSignalState foxSignalState = FOX_SIGNAL_LOST;
+static FoxSignalState foxSignalState = FOX_SIGNAL_CAL;
 static uint8_t foxSignalHold = 0;
-static int16_t foxNoiseFloorDbm = -125;
+static uint8_t foxSignalCalCount = 0;
+static int32_t foxNoiseFloorQ8 = -(120 << 8);
 #endif
 
 State currentState = SPECTRUM, previousState = SPECTRUM;
@@ -252,8 +254,7 @@ static void FoxPlayCue(int score)
     uint8_t period;
     uint16_t tone;
 
-    if (!foxSoundEnabled || foxSignalState != FOX_SIGNAL_TARGET ||
-        score < 20 || foxGainSettle)
+    if (!foxSoundEnabled || foxSignalState != FOX_SIGNAL_TARGET || foxGainSettle)
         return;
 
     period = score >= 80 ? 2 : (score >= 60 ? 4 :
@@ -264,9 +265,8 @@ static void FoxPlayCue(int score)
     tone = score >= 80 ? 1100 : (score >= 50 ? 850 : 600);
 
     BK4819_PlayTone(tone, true);
-    AUDIO_AudioPathOn();
     BK4819_ExitTxMute();
-    SYSTEM_DelayMs(25);
+    SYSTEM_DelayMs(55);
     BK4819_EnterTxMute();
     AUDIO_AudioPathOff();
     BK4819_TurnsOffTones_TurnsOnRX();
@@ -274,6 +274,7 @@ static void FoxPlayCue(int score)
     BK4819_SetFilterBandwidth(settings.listenBw, false);
     RADIO_SetupAGC(settings.modulationType == MODULATION_AM, true);
     FoxApplyGain();
+    BK4819_SetAF(BK4819_AF_MUTE);
     AUDIO_AudioPathOn();
 }
 
@@ -316,16 +317,31 @@ static void FoxProcessMeasurement(void)
     }
 
     dbm = FoxCorrectedDBm(scanInfo.rssi);
-    if (dbm < foxNoiseFloorDbm)
-        foxNoiseFloorDbm = dbm;
-    if (dbm >= foxNoiseFloorDbm + 6 && dbm > -125) {
-        foxSignalState = FOX_SIGNAL_TARGET;
-        foxSignalHold = 50;
-    } else if (foxSignalHold) {
-        foxSignalHold--;
-        foxSignalState = FOX_SIGNAL_WAIT;
-    } else {
-        foxSignalState = FOX_SIGNAL_LOST;
+    if (!foxGainSettle) {
+        if (foxSignalCalCount) {
+            if (foxSignalCalCount == 12)
+                foxNoiseFloorQ8 = (int32_t)dbm << 8;
+            else
+                foxNoiseFloorQ8 += (((int32_t)dbm << 8) - foxNoiseFloorQ8) >> 2;
+            foxSignalCalCount--;
+            foxSignalState = FOX_SIGNAL_CAL;
+        } else {
+            int noiseFloorDbm = foxNoiseFloorQ8 >> 8;
+            bool signalPresent = dbm >= noiseFloorDbm + 7 || dbm >= -85;
+
+            if (signalPresent) {
+                foxSignalState = FOX_SIGNAL_TARGET;
+                foxSignalHold = 50;
+            } else {
+                foxNoiseFloorQ8 += (((int32_t)dbm << 8) - foxNoiseFloorQ8) >> 3;
+                if (foxSignalHold) {
+                    foxSignalHold--;
+                    foxSignalState = FOX_SIGNAL_WAIT;
+                } else {
+                    foxSignalState = FOX_SIGNAL_LOST;
+                }
+            }
+        }
     }
     if (++foxTrendCounter >= 5) {
         int delta = dbm - foxLastDbm;
@@ -647,9 +663,10 @@ static void FoxEnter(uint32_t frequency)
     foxGainSettle = 0;
     foxGainTriggerCount = 0;
     foxSoundCounter = 0;
-    foxSignalState = FOX_SIGNAL_LOST;
+    foxSignalState = FOX_SIGNAL_CAL;
     foxSignalHold = 0;
-    foxNoiseFloorDbm = -125;
+    foxSignalCalCount = 12;
+    foxNoiseFloorQ8 = -(120 << 8);
     monitorMode = true;
     menuState = 0;
     FoxSetGain(0);
@@ -1686,7 +1703,8 @@ static void RenderStill()
                             (foxTrend < 0 ? "DOWN" : "HOLD");
 
         const char *signalName = foxSignalState == FOX_SIGNAL_TARGET ? "TARGET" :
-                                 (foxSignalState == FOX_SIGNAL_WAIT ? "WAIT" : "LOST");
+                                 (foxSignalState == FOX_SIGNAL_WAIT ? "WAIT" :
+                                  (foxSignalState == FOX_SIGNAL_LOST ? "LOST" : "CAL"));
 
         sprintf(String, "%s %s %d%%", signalName, gainName[foxGain], score);
         UI_PrintStringSmallBold(String, 0, 127, 0);
@@ -2159,6 +2177,7 @@ void APP_RunFox(void)
     foxPeakRssi = scanInfo.rssi;
     foxFilterReady = true;
     ToggleRX(true);
+    BK4819_SetAF(BK4819_AF_MUTE);
 
     isInitialized = true;
     while (isInitialized)
