@@ -86,6 +86,8 @@ static FoxSignalState foxSignalState = FOX_SIGNAL_CAL;
 static uint8_t foxSignalHold = 0;
 static uint8_t foxSignalCalCount = 0;
 static int32_t foxNoiseFloorQ8 = -(120 << 8);
+static bool foxOverload = false;
+static uint8_t foxOverloadCount = 0;
 #endif
 
 State currentState = SPECTRUM, previousState = SPECTRUM;
@@ -317,6 +319,15 @@ static void FoxProcessMeasurement(void)
     }
 
     dbm = FoxCorrectedDBm(scanInfo.rssi);
+    if (dbm >= -72) {
+        if (foxOverloadCount < 3)
+            foxOverloadCount++;
+        if (foxOverloadCount >= 3)
+            foxOverload = true;
+    } else if (dbm < -80) {
+        foxOverload = false;
+        foxOverloadCount = 0;
+    }
     if (!foxGainSettle) {
         if (foxSignalCalCount) {
             if (foxSignalCalCount == 12)
@@ -361,7 +372,7 @@ static void FoxProcessMeasurement(void)
         foxPeakDbm = dbm;
     }
 
-    FoxPlayCue(clamp((dbm + 120) * 100 / 80, 0, 100));
+    FoxPlayCue(foxOverload ? 100 : clamp((dbm + 120) * 100 / 80, 0, 100));
 }
 #endif
 
@@ -667,6 +678,8 @@ static void FoxEnter(uint32_t frequency)
     foxSignalHold = 0;
     foxSignalCalCount = 12;
     foxNoiseFloorQ8 = -(120 << 8);
+    foxOverload = false;
+    foxOverloadCount = 0;
     monitorMode = true;
     menuState = 0;
     FoxSetGain(0);
@@ -1706,7 +1719,10 @@ static void RenderStill()
                                  (foxSignalState == FOX_SIGNAL_WAIT ? "WAIT" :
                                   (foxSignalState == FOX_SIGNAL_LOST ? "LOST" : "CAL"));
 
-        sprintf(String, "%s %s %d%%", signalName, gainName[foxGain], score);
+        if (foxOverload)
+            sprintf(String, "TOO CLOSE %d%%", score);
+        else
+            sprintf(String, "%s %s %d%%", signalName, gainName[foxGain], score);
         UI_PrintStringSmallBold(String, 0, 127, 0);
         sprintf(String, "%4d", dbm);
         UI_DisplayFrequency(String, 24, 1, false);
