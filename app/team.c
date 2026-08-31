@@ -17,11 +17,11 @@
 #include <stdint.h>
 #include <string.h>
 
-static void TEAM_Render(bool seen, uint16_t ageTicks, int lastDbm,
-                        uint8_t dcsCode)
+static void TEAM_Render(bool seen, uint16_t ageTicks, uint16_t carrierTicks,
+                        int lastDbm, uint8_t dcsCode)
 {
     char text[24];
-    const char *state = !seen ? "NO LINK" :
+    const char *state = !seen ? (carrierTicks < 300 ? "RF NO DCS" : "NO LINK") :
         (ageTicks < 3500 ? "LINK OK" :
         (ageTicks < 6000 ? "LINK WEAK" : "LINK LOST"));
     uint32_t frequency = gTxVfo->pRX->Frequency;
@@ -52,17 +52,32 @@ void TEAM_Run(void)
     uint8_t dcsCode = gTxVfo->pRX->CodeType == CODE_TYPE_DIGITAL
         ? gTxVfo->pRX->Code : 6; // D023N is the safe default for initial tests.
     uint16_t ageTicks = 0;
+    uint16_t carrierTicks = 0xFFFF;
     uint8_t renderTicks = 0;
     KEY_Code_t previousKey = KEY_INVALID;
     int lastDbm = -160;
     uint16_t oldInterruptMask = BK4819_ReadRegister(BK4819_REG_3F);
+    VFO_Info_t *oldRxVfo = gRxVfo;
+    VFO_Info_t *oldCurrentVfo = gCurrentVfo;
+    DCS_CodeType_t oldCodeType = gTxVfo->pRX->CodeType;
+    uint8_t oldCode = gTxVfo->pRX->Code;
 
     AUDIO_AudioPathOff();
-    BK4819_SetCDCSSCodeWord(DCS_GetGolayCodeWord(CODE_TYPE_DIGITAL, dcsCode));
+    // Use the normal radio setup path so every BK4819 DCS detector register is
+    // initialized exactly as it is during ordinary coded reception. Restore the
+    // channel data immediately: TEAM mode must not alter EEPROM configuration.
+    gRxVfo = gTxVfo;
+    gCurrentVfo = gTxVfo;
+    gTxVfo->pRX->CodeType = CODE_TYPE_DIGITAL;
+    gTxVfo->pRX->Code = dcsCode;
+    RADIO_SetupRegisters(true);
+    gTxVfo->pRX->CodeType = oldCodeType;
+    gTxVfo->pRX->Code = oldCode;
     BK4819_WriteRegister(BK4819_REG_3F,
-        BK4819_REG_3F_CDCSS_FOUND | BK4819_REG_3F_CDCSS_LOST);
+        BK4819_REG_3F_CDCSS_FOUND | BK4819_REG_3F_CDCSS_LOST |
+        BK4819_REG_3F_SQUELCH_FOUND | BK4819_REG_3F_SQUELCH_LOST);
     BK4819_WriteRegister(BK4819_REG_02, 0);
-    TEAM_Render(seen, ageTicks, lastDbm, dcsCode);
+    TEAM_Render(seen, ageTicks, carrierTicks, lastDbm, dcsCode);
 
     while (1) {
         KEY_Code_t key = KEYBOARD_Poll();
@@ -83,18 +98,28 @@ void TEAM_Run(void)
                 ageTicks = 0;
                 lastDbm = (rssi / 2) - 160 + dBmCorrTable[gTxVfo->Band];
             }
+            if (interrupts & BK4819_REG_02_SQUELCH_LOST) {
+                uint16_t rssi = BK4819_GetRSSI();
+
+                carrierTicks = 0;
+                lastDbm = (rssi / 2) - 160 + dBmCorrTable[gTxVfo->Band];
+            }
         }
 
         if (seen && ageTicks < 65000)
             ageTicks++;
+        if (carrierTicks < 65000)
+            carrierTicks++;
         if (++renderTicks >= 10) {
             renderTicks = 0;
-            TEAM_Render(seen, ageTicks, lastDbm, dcsCode);
+            TEAM_Render(seen, ageTicks, carrierTicks, lastDbm, dcsCode);
         }
         SYSTEM_DelayMs(10);
     }
 
     BK4819_WriteRegister(BK4819_REG_3F, oldInterruptMask);
+    gRxVfo = oldRxVfo;
+    gCurrentVfo = oldCurrentVfo;
     RADIO_SetupRegisters(true);
     gUpdateDisplay = true;
 }
