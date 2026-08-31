@@ -1538,6 +1538,22 @@ void OnKeyDownStill(KEY_Code_t key)
         BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true); */
         break;
     case KEY_MENU:
+#ifdef ENABLE_FOX_MODE
+        if (foxMode) {
+            foxMode = false;
+            monitorMode = false;
+            lockAGC = false;
+            RADIO_SetupAGC(settings.modulationType == MODULATION_AM, false);
+            currentFreq = gTxVfo->pRX->Frequency -
+                          ((GetStepsCount() / 2) * GetScanStep());
+            currentState = SPECTRUM;
+            previousState = SPECTRUM;
+            ResetBlacklist();
+            memset(rssiHistory, 0, sizeof(rssiHistory));
+            RelaunchScan();
+            break;
+        }
+#endif
         if (menuState == ARRAY_SIZE(registerSpecs) - 1)
         {
             menuState = 1;
@@ -2055,15 +2071,7 @@ void APP_RunFox(void)
     currentFreq = initialFreq = gTxVfo->pRX->Frequency;
     BackupRegisters();
 
-    foxMode = true;
-    foxFilterReady = false;
-    foxFilteredQ8 = 0;
-    foxPeakRssi = 0;
-    foxPeakResetTicks = 0;
-    currentState = STILL;
-    previousState = STILL;
-    menuState = 0;
-    monitorMode = true;
+    foxMode = false;
     lockAGC = false;
     isListening = true;
     redrawStatus = true;
@@ -2076,7 +2084,7 @@ void APP_RunFox(void)
     ToggleRX(true), ToggleRX(false);
     RADIO_SetModulation(settings.modulationType = gTxVfo->Modulation);
     BK4819_SetFilterBandwidth(settings.listenBw, false);
-    SetF(currentFreq);
+    FoxEnter(currentFreq);
     scanInfo.rssi = GetRssi();
     foxFilteredQ8 = (int32_t)scanInfo.rssi << 8;
     foxPeakRssi = scanInfo.rssi;
