@@ -74,6 +74,16 @@ static int16_t foxGainCorrection[] = {0, 40, 76};
 static int16_t foxGainAnchorDbm = -160;
 static uint8_t foxGainSettle = 0;
 static uint8_t foxGainTriggerCount = 0;
+static bool foxSoundEnabled = true;
+static uint8_t foxSoundCounter = 0;
+typedef enum {
+    FOX_SIGNAL_LOST,
+    FOX_SIGNAL_WAIT,
+    FOX_SIGNAL_TARGET,
+} FoxSignalState;
+static FoxSignalState foxSignalState = FOX_SIGNAL_LOST;
+static uint8_t foxSignalHold = 0;
+static int16_t foxNoiseFloorDbm = -125;
 #endif
 
 State currentState = SPECTRUM, previousState = SPECTRUM;
@@ -196,6 +206,20 @@ static int Rssi2DBm(uint16_t rssi)
 #ifdef ENABLE_FOX_MODE
 void LockAGC(void);
 static int clamp(int v, int min, int max);
+static void SetF(uint32_t f);
+
+static void FoxApplyGain(void)
+{
+    static const uint8_t lnas[] = {3, 1, 0};
+    static const uint8_t lna[] = {7, 3, 0};
+    static const uint8_t vga[] = {7, 3, 0};
+    uint16_t reg = BK4819_ReadRegister(BK4819_REG_13);
+
+    reg &= ~((uint16_t)0x7ff);
+    reg |= ((uint16_t)lnas[foxGain] << 8) |
+           ((uint16_t)lna[foxGain] << 5) | vga[foxGain];
+    BK4819_WriteRegister(BK4819_REG_13, reg);
+}
 
 static int FoxCorrectedDBm(uint16_t rssi)
 {
@@ -206,10 +230,6 @@ static int FoxCorrectedDBm(uint16_t rssi)
 
 static void FoxSetGain(uint8_t gain)
 {
-    static const uint8_t lnas[] = {3, 1, 0};
-    static const uint8_t lna[] = {7, 3, 0};
-    static const uint8_t vga[] = {7, 3, 0};
-    uint16_t reg;
     bool calibrate;
 
     if (gain > 2 || gain == foxGain)
@@ -219,16 +239,42 @@ static void FoxSetGain(uint8_t gain)
     if (calibrate)
         foxGainAnchorDbm = FoxCorrectedDBm(scanInfo.rssi);
     LockAGC();
-    reg = BK4819_ReadRegister(BK4819_REG_13);
-    reg &= ~((uint16_t)0x7ff);
-    reg |= ((uint16_t)lnas[gain] << 8) |
-           ((uint16_t)lna[gain] << 5) | vga[gain];
-    BK4819_WriteRegister(BK4819_REG_13, reg);
     foxGain = gain;
+    FoxApplyGain();
     foxFilterReady = false;
     foxTrendCounter = 0;
     foxGainTriggerCount = 0;
     foxGainSettle = calibrate ? 4 : 0;
+}
+
+static void FoxPlayCue(int score)
+{
+    uint8_t period;
+    uint16_t tone;
+
+    if (!foxSoundEnabled || foxSignalState != FOX_SIGNAL_TARGET ||
+        score < 20 || foxGainSettle)
+        return;
+
+    period = score >= 80 ? 2 : (score >= 60 ? 4 :
+             (score >= 40 ? 7 : 10));
+    if (++foxSoundCounter < period)
+        return;
+    foxSoundCounter = 0;
+    tone = score >= 80 ? 1100 : (score >= 50 ? 850 : 600);
+
+    BK4819_PlayTone(tone, true);
+    AUDIO_AudioPathOn();
+    BK4819_ExitTxMute();
+    SYSTEM_DelayMs(25);
+    BK4819_EnterTxMute();
+    AUDIO_AudioPathOff();
+    BK4819_TurnsOffTones_TurnsOnRX();
+    SetF(currentFreq);
+    BK4819_SetFilterBandwidth(settings.listenBw, false);
+    RADIO_SetupAGC(settings.modulationType == MODULATION_AM, true);
+    FoxApplyGain();
+    AUDIO_AudioPathOn();
 }
 
 static void FoxProcessMeasurement(void)
@@ -270,6 +316,17 @@ static void FoxProcessMeasurement(void)
     }
 
     dbm = FoxCorrectedDBm(scanInfo.rssi);
+    if (dbm < foxNoiseFloorDbm)
+        foxNoiseFloorDbm = dbm;
+    if (dbm >= foxNoiseFloorDbm + 6 && dbm > -125) {
+        foxSignalState = FOX_SIGNAL_TARGET;
+        foxSignalHold = 50;
+    } else if (foxSignalHold) {
+        foxSignalHold--;
+        foxSignalState = FOX_SIGNAL_WAIT;
+    } else {
+        foxSignalState = FOX_SIGNAL_LOST;
+    }
     if (++foxTrendCounter >= 5) {
         int delta = dbm - foxLastDbm;
         foxTrend = delta >= 3 ? 1 : (delta <= -3 ? -1 : 0);
@@ -287,6 +344,8 @@ static void FoxProcessMeasurement(void)
         foxPeakRssi = scanInfo.rssi;
         foxPeakDbm = dbm;
     }
+
+    FoxPlayCue(clamp((dbm + 120) * 100 / 80, 0, 100));
 }
 #endif
 
@@ -587,6 +646,10 @@ static void FoxEnter(uint32_t frequency)
     foxGainAnchorDbm = -160;
     foxGainSettle = 0;
     foxGainTriggerCount = 0;
+    foxSoundCounter = 0;
+    foxSignalState = FOX_SIGNAL_LOST;
+    foxSignalHold = 0;
+    foxNoiseFloorDbm = -125;
     monitorMode = true;
     menuState = 0;
     FoxSetGain(0);
@@ -1145,6 +1208,8 @@ static void DrawStatus()
         sprintf(String, "%u.%05u", currentFreq / 100000,
                 currentFreq % 100000);
         GUI_DisplaySmallest(String, 0, 1, true, true);
+        GUI_DisplaySmallest(foxSoundEnabled ? "BEEP" : "MUTE", 72, 1,
+                            true, true);
     } else
 #endif
     {
@@ -1518,19 +1583,19 @@ void OnKeyDownStill(KEY_Code_t key)
     case KEY_6:
         ToggleListeningBW();
         break;
+    case KEY_1:
     case KEY_SIDE1:
+    case KEY_SIDE2:
 #ifdef ENABLE_FOX_MODE
         if (foxMode) {
-            foxPeakRssi = 0;
-            foxPeakResetTicks = 40;
+            foxSoundEnabled = !foxSoundEnabled;
+            foxSoundCounter = 0;
             redrawScreen = true;
+            redrawStatus = true;
             break;
         }
 #endif
         monitorMode = !monitorMode;
-        break;
-    case KEY_SIDE2:
-        ToggleBacklight();
         break;
     case KEY_PTT:
         // TODO: start transmit
@@ -1620,7 +1685,10 @@ static void RenderStill()
         const char *trend = foxTrend > 0 ? "UP" :
                             (foxTrend < 0 ? "DOWN" : "HOLD");
 
-        sprintf(String, "SAR %s %d%% %s", gainName[foxGain], score, trend);
+        const char *signalName = foxSignalState == FOX_SIGNAL_TARGET ? "TARGET" :
+                                 (foxSignalState == FOX_SIGNAL_WAIT ? "WAIT" : "LOST");
+
+        sprintf(String, "%s %s %d%%", signalName, gainName[foxGain], score);
         UI_PrintStringSmallBold(String, 0, 127, 0);
         sprintf(String, "%4d", dbm);
         UI_DisplayFrequency(String, 24, 1, false);
@@ -1630,6 +1698,7 @@ static void RenderStill()
         for (uint8_t i = 0; i < meterWidth; i++)
             UI_DrawLineBuffer(gFrameBuffer, 5 + i, 30, 5 + i, 44, true);
 
+        UI_PrintStringSmallBold(trend, 0, 45, 5);
         if (foxPeakResetTicks)
             UI_PrintStringSmallBold("RESET", 72, 127, 5);
         return;
