@@ -19,6 +19,7 @@ ENABLE_FLASHLIGHT               ?= 1
 # ---- CUSTOM MODS ----
 ENABLE_SPECTRUM                 ?= 0
 ENABLE_FOX_MODE                 ?= 0
+ENABLE_TEAM_MODE                ?= 0
 ENABLE_BIG_FREQ                 ?= 1
 ENABLE_SMALL_BOLD               ?= 1
 ENABLE_CUSTOM_MENU_LAYOUT       ?= 1
@@ -164,6 +165,9 @@ OBJS += app/main.o
 OBJS += app/menu.o
 ifeq ($(ENABLE_SPECTRUM), 1)
 OBJS += app/spectrum.o
+endif
+ifeq ($(ENABLE_TEAM_MODE), 1)
+OBJS += app/team.o
 endif
 ifeq ($(ENABLE_FEAT_F4HWN_SCREENSHOT), 1)
 OBJS += screenshot.o
@@ -318,6 +322,9 @@ CFLAGS += -DENABLE_SPECTRUM
 endif
 ifeq ($(ENABLE_FOX_MODE),1)
 CFLAGS += -DENABLE_FOX_MODE
+endif
+ifeq ($(ENABLE_TEAM_MODE),1)
+CFLAGS += -DENABLE_TEAM_MODE
 endif
 ifeq ($(ENABLE_SWD),1)
 	CFLAGS += -DENABLE_SWD

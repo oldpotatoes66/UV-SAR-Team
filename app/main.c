@@ -31,6 +31,10 @@
 #include "app/spectrum.h"
 #endif
 
+#ifdef ENABLE_TEAM_MODE
+#include "app/team.h"
+#endif
+
 #ifdef ENABLE_FEAT_F4HWN_GAME
 #include "app/breakout.h"
 #endif
@@ -250,6 +254,13 @@ static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
             break;
 
         case KEY_6:
+#ifdef ENABLE_TEAM_MODE
+            if (beep) {
+                TEAM_Run();
+                gRequestDisplayScreen = DISPLAY_MAIN;
+                break;
+            }
+#endif
             ACTION_Power();
             break;
 
