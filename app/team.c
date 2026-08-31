@@ -32,9 +32,9 @@ static void TEAM_Render(bool seen, uint16_t ageTicks, uint16_t carrierTicks,
     UI_PrintStringSmallBold("TEAM RX ONLY", 18, 110, 1);
     UI_PrintStringSmallBold(state, 24, 112, 2);
 
-    // DCS_Options stores the printed digits as packed hexadecimal (0x023 = 023).
-    // Octal formatting would incorrectly render D023 as D043.
-    sprintf(text, "DCS %03XN", DCS_Options[dcsCode]);
+    // DCS numbers use octal digits. DCS_Options stores their numeric value, so
+    // 0x13 (decimal 19) must be rendered as octal 023.
+    sprintf(text, "DCS %03oN", DCS_Options[dcsCode]);
     UI_PrintStringSmallBold(text, 8, 72, 4);
     if (seen) {
         sprintf(text, "%d dBm", lastDbm);
@@ -50,7 +50,7 @@ void TEAM_Run(void)
 {
     bool seen = false;
     uint8_t dcsCode = gTxVfo->pRX->CodeType == CODE_TYPE_DIGITAL
-        ? gTxVfo->pRX->Code : 6; // D023N is the safe default for initial tests.
+        ? gTxVfo->pRX->Code : 0; // DCS_Options[0] is D023N (octal 023).
     uint16_t ageTicks = 0;
     uint16_t carrierTicks = 0xFFFF;
     uint8_t renderTicks = 0;
