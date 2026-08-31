@@ -280,6 +280,25 @@ static void FoxPlayCue(int score)
     AUDIO_AudioPathOn();
 }
 
+static void FoxDrawTrendIcon(void)
+{
+    const uint8_t x = 8;
+
+    if (foxTrend > 0) {
+        UI_DrawLineBuffer(gFrameBuffer, x, 54, x + 8, 46, true);
+        UI_DrawLineBuffer(gFrameBuffer, x + 8, 46, x + 16, 54, true);
+        UI_DrawLineBuffer(gFrameBuffer, x + 8, 46, x + 8, 55, true);
+    } else if (foxTrend < 0) {
+        UI_DrawLineBuffer(gFrameBuffer, x, 47, x + 8, 55, true);
+        UI_DrawLineBuffer(gFrameBuffer, x + 8, 55, x + 16, 47, true);
+        UI_DrawLineBuffer(gFrameBuffer, x + 8, 46, x + 8, 55, true);
+    } else {
+        UI_DrawLineBuffer(gFrameBuffer, x, 51, x + 16, 51, true);
+        UI_DrawLineBuffer(gFrameBuffer, x + 12, 47, x + 16, 51, true);
+        UI_DrawLineBuffer(gFrameBuffer, x + 12, 55, x + 16, 51, true);
+    }
+}
+
 static void FoxProcessMeasurement(void)
 {
     int rawDbm;
@@ -1628,9 +1647,14 @@ void OnKeyDownStill(KEY_Code_t key)
         monitorMode = !monitorMode;
         break;
     case KEY_PTT:
-        // TODO: start transmit
-        /* BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, false);
-        BK4819_ToggleGpioOut(BK4819_GPIO5_PIN1_RED, true); */
+        #ifdef ENABLE_FOX_MODE
+        if (foxMode) {
+            foxPeakRssi = scanInfo.rssi;
+            foxPeakDbm = FoxCorrectedDBm(scanInfo.rssi);
+            foxPeakResetTicks = 10;
+            redrawScreen = true;
+        }
+        #endif
         break;
     case KEY_MENU:
 #ifdef ENABLE_FOX_MODE
@@ -1712,9 +1736,6 @@ static void RenderStill()
         int dbm = FoxCorrectedDBm(scanInfo.rssi);
         int score = clamp((dbm + 120) * 100 / 80, 0, 100);
         uint8_t meterWidth = score * 118 / 100;
-        const char *trend = foxTrend > 0 ? "UP" :
-                            (foxTrend < 0 ? "DOWN" : "HOLD");
-
         const char *signalName = foxSignalState == FOX_SIGNAL_TARGET ? "TARGET" :
                                  (foxSignalState == FOX_SIGNAL_WAIT ? "WAIT" :
                                   (foxSignalState == FOX_SIGNAL_LOST ? "LOST" : "CAL"));
@@ -1728,13 +1749,15 @@ static void RenderStill()
         UI_DisplayFrequency(String, 24, 1, false);
         UI_PrintStringSmallBold("dBm", 91, 127, 2);
 
-        UI_DrawRectangleBuffer(gFrameBuffer, 3, 28, 124, 46, true);
+        UI_DrawRectangleBuffer(gFrameBuffer, 3, 27, 124, 43, true);
         for (uint8_t i = 0; i < meterWidth; i++)
-            UI_DrawLineBuffer(gFrameBuffer, 5 + i, 30, 5 + i, 44, true);
+            UI_DrawLineBuffer(gFrameBuffer, 5 + i, 29, 5 + i, 41, true);
 
-        UI_PrintStringSmallBold(trend, 0, 45, 5);
+        FoxDrawTrendIcon();
+        sprintf(String, "PK %d", foxPeakDbm);
+        UI_PrintStringSmallBold(String, 34, 90, 6);
         if (foxPeakResetTicks)
-            UI_PrintStringSmallBold("RESET", 72, 127, 5);
+            UI_PrintStringSmallBold("RESET", 91, 127, 6);
         return;
     }
 #endif
