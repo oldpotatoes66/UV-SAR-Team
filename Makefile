@@ -18,6 +18,7 @@ ENABLE_FLASHLIGHT               ?= 1
 
 # ---- CUSTOM MODS ----
 ENABLE_SPECTRUM                 ?= 0
+ENABLE_FOX_MODE                 ?= 0
 ENABLE_BIG_FREQ                 ?= 1
 ENABLE_SMALL_BOLD               ?= 1
 ENABLE_CUSTOM_MENU_LAYOUT       ?= 1
@@ -314,6 +315,9 @@ CFLAGS += -DAUTHOR_STRING=\"$(AUTHOR_STRING)\" -DVERSION_STRING=\"$(VERSION_STRI
 
 ifeq ($(ENABLE_SPECTRUM),1)
 CFLAGS += -DENABLE_SPECTRUM
+endif
+ifeq ($(ENABLE_FOX_MODE),1)
+CFLAGS += -DENABLE_FOX_MODE
 endif
 ifeq ($(ENABLE_SWD),1)
 	CFLAGS += -DENABLE_SWD

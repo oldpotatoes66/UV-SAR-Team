@@ -59,6 +59,13 @@ bool newScanStart = true;
 bool preventKeypress = true;
 bool audioState = true;
 bool lockAGC = false;
+#ifdef ENABLE_FOX_MODE
+static bool foxMode = false;
+static bool foxFilterReady = false;
+static int32_t foxFilteredQ8 = 0;
+static uint16_t foxPeakRssi = 0;
+static uint8_t foxPeakResetTicks = 0;
+#endif
 
 State currentState = SPECTRUM, previousState = SPECTRUM;
 
@@ -1360,6 +1367,14 @@ void OnKeyDownStill(KEY_Code_t key)
         ToggleListeningBW();
         break;
     case KEY_SIDE1:
+#ifdef ENABLE_FOX_MODE
+        if (foxMode) {
+            foxPeakRssi = 0;
+            foxPeakResetTicks = 40;
+            redrawScreen = true;
+            break;
+        }
+#endif
         monitorMode = !monitorMode;
         break;
     case KEY_SIDE2:
@@ -1382,6 +1397,16 @@ void OnKeyDownStill(KEY_Code_t key)
         redrawScreen = true;
         break;
     case KEY_EXIT:
+#ifdef ENABLE_FOX_MODE
+        if (foxMode)
+        {
+            foxMode = false;
+            monitorMode = false;
+            lockAGC = false;
+            DeInitSpectrum();
+            break;
+        }
+#endif
         if (!menuState)
         {
             SetState(SPECTRUM);
@@ -1418,7 +1443,35 @@ static void RenderSpectrum()
 
 static void RenderStill()
 {
+#ifdef ENABLE_FOX_MODE
+    if (foxMode && !menuState) {
+        int dbm = Rssi2DBm(scanInfo.rssi);
+        uint8_t meterWidth = Rssi2PX(scanInfo.rssi, 0, 120);
+
+        UI_PrintString("FOX  RX ONLY", 0, 127, 0, 8);
+        sprintf(String, "%4d", dbm);
+        UI_DisplayFrequency(String, 29, 1, false);
+        UI_PrintString("dBm", 94, 127, 2, 8);
+
+        UI_DrawRectangleBuffer(gFrameBuffer, 3, 27, 124, 42, true);
+        for (uint8_t i = 0; i < meterWidth; i++)
+            UI_DrawLineBuffer(gFrameBuffer, 5 + i, 29, 5 + i, 40, true);
+
+        if (foxPeakResetTicks)
+            UI_PrintString("PEAK RESET", 0, 127, 6, 8);
+        else {
+            sprintf(String, "PK %d dBm", Rssi2DBm(foxPeakRssi));
+            UI_PrintString(String, 0, 127, 6, 8);
+        }
+        return;
+    }
+#endif
     DrawF(fMeasure);
+
+#ifdef ENABLE_FOX_MODE
+    if (foxMode)
+        GUI_DisplaySmallest("FOX PTT LOCK", 39, 1, false, true);
+#endif
 
     const uint8_t METER_PAD_LEFT = 3;
 
@@ -1449,6 +1502,15 @@ static void RenderStill()
     GUI_DisplaySmallest(String, 4, 25, false, true);
     sprintf(String, "%d dBm", dbm);
     GUI_DisplaySmallest(String, 28, 25, false, true);
+
+#ifdef ENABLE_FOX_MODE
+    if (foxMode) {
+        sprintf(String, "PK %d", Rssi2DBm(foxPeakRssi));
+        GUI_DisplaySmallest(String, 80, 25, false, true);
+        uint8_t peakX = Rssi2PX(foxPeakRssi, 0, 121);
+        gFrameBuffer[2][METER_PAD_LEFT + peakX] = 0xff;
+    }
+#endif
 
     if (!monitorMode)
     {
@@ -1615,6 +1677,24 @@ static void UpdateScan()
 static void UpdateStill()
 {
     Measure();
+#ifdef ENABLE_FOX_MODE
+    if (foxMode) {
+        if (!foxFilterReady) {
+            foxFilteredQ8 = (int32_t)scanInfo.rssi << 8;
+            foxFilterReady = true;
+        } else {
+            foxFilteredQ8 += (((int32_t)scanInfo.rssi << 8) - foxFilteredQ8) >> 2;
+        }
+        scanInfo.rssi = (uint16_t)(foxFilteredQ8 >> 8);
+        if (foxPeakResetTicks) {
+            foxPeakResetTicks--;
+            if (!foxPeakResetTicks)
+                foxPeakRssi = scanInfo.rssi;
+        } else if (scanInfo.rssi > foxPeakRssi) {
+            foxPeakRssi = scanInfo.rssi;
+        }
+    }
+#endif
     redrawScreen = true;
     preventKeypress = false;
 
@@ -1819,3 +1899,46 @@ void APP_RunSpectrum()
         Tick();
     }
 }
+
+#ifdef ENABLE_FOX_MODE
+void APP_RunFox(void)
+{
+    vfo = gEeprom.TX_VFO;
+    LoadSettings();
+
+    currentFreq = initialFreq = gTxVfo->pRX->Frequency;
+    BackupRegisters();
+
+    foxMode = true;
+    foxFilterReady = false;
+    foxFilteredQ8 = 0;
+    foxPeakRssi = 0;
+    foxPeakResetTicks = 0;
+    currentState = STILL;
+    previousState = STILL;
+    menuState = 0;
+    monitorMode = true;
+    lockAGC = false;
+    isListening = true;
+    redrawStatus = true;
+    redrawScreen = true;
+    preventKeypress = false;
+    kbd.current = KEY_INVALID;
+    kbd.prev = KEY_INVALID;
+    kbd.counter = 0;
+
+    ToggleRX(true), ToggleRX(false);
+    RADIO_SetModulation(settings.modulationType = gTxVfo->Modulation);
+    BK4819_SetFilterBandwidth(settings.listenBw, false);
+    SetF(currentFreq);
+    scanInfo.rssi = GetRssi();
+    foxFilteredQ8 = (int32_t)scanInfo.rssi << 8;
+    foxPeakRssi = scanInfo.rssi;
+    foxFilterReady = true;
+    ToggleRX(true);
+
+    isInitialized = true;
+    while (isInitialized)
+        Tick();
+}
+#endif

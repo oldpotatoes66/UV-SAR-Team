@@ -181,6 +181,9 @@ typedef struct PeakInfo
 } PeakInfo;
 
 void APP_RunSpectrum(void);
+#ifdef ENABLE_FOX_MODE
+void APP_RunFox(void);
+#endif
 
 #endif /* ifndef SPECTRUM_H */
 
