@@ -27,6 +27,12 @@
 #include "ui/helper.h"
 #include "ui/main.h"
 
+#ifdef SAR_TEAM_BUILD
+#define SPECTRUM_ONLY_UNUSED __attribute__((unused))
+#else
+#define SPECTRUM_ONLY_UNUSED
+#endif
+
 #ifdef ENABLE_FEAT_F4HWN_SCREENSHOT
 #include "screenshot.h"
 #endif
@@ -1472,7 +1478,7 @@ static void DrawArrow(uint8_t x)
     }
 }
 
-static void OnKeyDown(uint8_t key)
+static SPECTRUM_ONLY_UNUSED void OnKeyDown(uint8_t key)
 {
     switch (key)
     {
@@ -1570,7 +1576,7 @@ static void OnKeyDown(uint8_t key)
     }
 }
 
-static void OnKeyDownFreqInput(uint8_t key)
+static SPECTRUM_ONLY_UNUSED void OnKeyDownFreqInput(uint8_t key)
 {
     switch (key)
     {
@@ -1701,6 +1707,13 @@ void OnKeyDownStill(KEY_Code_t key)
     case KEY_MENU:
 #ifdef ENABLE_FOX_MODE
         if (foxMode) {
+#ifdef SAR_TEAM_BUILD
+            // The field build enters SAR directly on the selected VFO
+            // frequency. Keeping this transition would make the complete
+            // professional bandscope reachable and costs roughly 9 KiB.
+            redrawScreen = true;
+            break;
+#else
             foxMode = false;
             monitorMode = false;
             lockAGC = false;
@@ -1713,6 +1726,7 @@ void OnKeyDownStill(KEY_Code_t key)
             memset(rssiHistory, 0, sizeof(rssiHistory));
             RelaunchScan();
             break;
+#endif
         }
 #endif
         if (menuState == ARRAY_SIZE(registerSpecs) - 1)
@@ -1751,7 +1765,7 @@ void OnKeyDownStill(KEY_Code_t key)
     }
 }
 
-static void RenderFreqInput() { UI_PrintString(freqInputString, 2, 127, 0, 8); }
+static SPECTRUM_ONLY_UNUSED void RenderFreqInput() { UI_PrintString(freqInputString, 2, 127, 0, 8); }
 
 static void RenderStatus()
 {
@@ -1760,7 +1774,7 @@ static void RenderStatus()
     ST7565_BlitStatusLine();
 }
 
-static void RenderSpectrum()
+static SPECTRUM_ONLY_UNUSED void RenderSpectrum()
 {
     DrawTicks();
     DrawArrow(128u * peak.i / GetStepsCount());
@@ -1911,6 +1925,9 @@ static void Render()
 {
     UI_DisplayClear();
 
+#ifdef SAR_TEAM_BUILD
+    RenderStill();
+#else
     switch (currentState)
     {
     case SPECTRUM:
@@ -1923,6 +1940,7 @@ static void Render()
         RenderStill();
         break;
     }
+#endif
 
     ST7565_BlitFullScreen();
 }
@@ -1947,6 +1965,9 @@ bool HandleUserInput()
 
     if (kbd.counter == 3 || kbd.counter == 16)
     {
+#ifdef SAR_TEAM_BUILD
+        OnKeyDownStill(kbd.current);
+#else
         switch (currentState)
         {
         case SPECTRUM:
@@ -1959,6 +1980,7 @@ bool HandleUserInput()
             OnKeyDownStill(kbd.current);
             break;
         }
+#endif
     }
 
     return true;
@@ -1985,7 +2007,7 @@ static void NextScanStep()
     scanInfo.f += scanInfo.scanStep;
 }
 
-static void UpdateScan()
+static SPECTRUM_ONLY_UNUSED void UpdateScan()
 {
     Scan();
 
@@ -2051,6 +2073,7 @@ static void UpdateListening()
         return;
     }
 
+#ifndef SAR_TEAM_BUILD
     if (currentState == SPECTRUM)
     {
         BK4819_WriteRegister(0x43, GetBWRegValueForScan());
@@ -2058,6 +2081,7 @@ static void UpdateListening()
         BK4819_WriteRegister(0x43, listenBWRegValues[settings.listenBw]);
     }
     else
+#endif
     {
         Measure();
 #ifdef ENABLE_FOX_MODE
@@ -2099,7 +2123,7 @@ static void Tick()
     }
 #endif
 
-#ifdef ENABLE_SCAN_RANGES
+#if defined(ENABLE_SCAN_RANGES) && !defined(SAR_TEAM_BUILD)
     if (gNextTimeslice_500ms)
     {
         gNextTimeslice_500ms = false;
@@ -2131,6 +2155,12 @@ static void Tick()
         InitScan();
         newScanStart = false;
     }
+#ifdef SAR_TEAM_BUILD
+    if (isListening)
+        UpdateListening();
+    else
+        UpdateStill();
+#else
     if (isListening && currentState != FREQ_INPUT)
     {
         UpdateListening();
@@ -2146,6 +2176,7 @@ static void Tick()
             UpdateStill();
         }
     }
+#endif
     if (redrawStatus || ++statuslineUpdateTimer > 4096)
     {
         RenderStatus();
@@ -2163,6 +2194,7 @@ static void Tick()
     }
 }
 
+#ifndef SAR_TEAM_BUILD
 void APP_RunSpectrum()
 {
     // TX here coz it always? set to active VFO
@@ -2231,6 +2263,7 @@ void APP_RunSpectrum()
         Tick();
     }
 }
+#endif
 
 #ifdef ENABLE_FOX_MODE
 void APP_RunFox(void)

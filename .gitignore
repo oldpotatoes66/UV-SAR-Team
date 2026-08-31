@@ -8,6 +8,9 @@ firmware
 compile_commands.json
 .vscode
 /docs
+/team-config-backups
+K5TOOL.log*
+*.img
 k5_eeprom.raw
 f4hwn
 f4hwn.*

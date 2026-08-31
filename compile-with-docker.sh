@@ -18,16 +18,15 @@ esac
 # Create firmware output directory if it doesn't exist
 mkdir -p "$FIRMWARE_DIR"
 
-# Clean previously compiled firmware files
-rm -f "$FIRMWARE_DIR"/*
-
-# Clean up old Docker artifacts
-echo "🧽 Cleaning up old Docker artifacts..."
-docker system prune -f --volumes >/dev/null 2>&1 || true
+# Global Docker pruning is intentionally opt-in. A firmware build must not
+# remove unrelated images, caches, containers, or volumes from the host.
+if [ "${DOCKER_PRUNE:-0}" = "1" ]; then
+    echo "🧽 Cleaning up unused Docker artifacts (DOCKER_PRUNE=1)..."
+    docker system prune -f >/dev/null 2>&1 || true
+fi
 
 # Always rebuild the Docker image to ensure latest code changes
 echo "⚙️ Rebuilding Docker image '$IMAGE_NAME' (base=${BASE})..."
-docker rmi "$IMAGE_NAME" 2>/dev/null || true
 if ! docker build --pull --build-arg "ALPINE_TAG=${ALPINE_TAG}" -t "$IMAGE_NAME" .; then
     echo "❌ Failed to build docker image"
     exit 1
@@ -152,6 +151,16 @@ rescueops() {
         && cp f4hwn.rescueops* compiled-firmware/"
 }
 
+sarteam() {
+    echo "Compiling SAR-TEAM..."
+    docker run -v "$FIRMWARE_DIR:/app/compiled-firmware" "$IMAGE_NAME" /bin/bash -c "\
+        rm -f ./compiled-firmware/f4hwn.sar-team* && cd /app && make -s \
+        SAR_TEAM_BUILD=1 \
+        EDITION_STRING=SAR-TEAM \
+        TARGET=f4hwn.sar-team \
+        && cp f4hwn.sar-team* compiled-firmware/"
+}
+
 game() {
     echo "🎮 Compiling Game..."
     docker run -v "$FIRMWARE_DIR:/app/compiled-firmware" "$IMAGE_NAME" /bin/bash -c "\
@@ -180,16 +189,18 @@ case "$1" in
     broadcast) broadcast ;;
     basic) basic ;;
     rescueops) rescueops ;;
+    sarteam) sarteam ;;
     game) game ;;
     all)
         bandscope
         broadcast
         basic
         rescueops
+        sarteam
         game
         ;;
     *)
-        echo "Usage: BASE=alpine:<tag> $0 {clean|custom|standard|bandscope|broadcast|basic|rescueops|game|all}"
+        echo "Usage: BASE=alpine:<tag> $0 {clean|custom|standard|bandscope|broadcast|basic|rescueops|sarteam|game|all}"
         echo "Examples: BASE=alpine:3.22 … | BASE=alpine:3.21 … | BASE=alpine:3.19 … | BASE=alpine:edge …"
         exit 1
         ;;

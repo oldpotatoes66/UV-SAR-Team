@@ -85,6 +85,34 @@ ENABLE_EXPERIMENTAL_CLFAGS      ?= 1
 
 #############################################################
 
+# Dedicated SAR/ARTS field build. Keep the proven SAR and TEAM paths while
+# removing unrelated UI conveniences to leave room for bidirectional ARTS.
+ifeq ($(SAR_TEAM_BUILD),1)
+override ENABLE_TEAM_MODE                := 1
+override ENABLE_SPECTRUM                 := 1
+override ENABLE_FOX_MODE                 := 1
+override ENABLE_FMRADIO                  := 0
+# Keep the stock UART command channel so the public team_config.py utility can
+# read and update the dedicated SAR-TEAM EEPROM configuration block.
+override ENABLE_UART                     := 1
+override ENABLE_AIRCOPY                  := 0
+override ENABLE_NOAA                     := 0
+override ENABLE_VOICE                    := 0
+override ENABLE_VOX                      := 0
+override ENABLE_ALARM                    := 0
+override ENABLE_AUDIO_BAR                := 0
+override ENABLE_TX1750                   := 0
+override ENABLE_FLASHLIGHT               := 0
+override ENABLE_RSSI_BAR                 := 0
+override ENABLE_COPY_CHAN_TO_VFO         := 0
+override ENABLE_FEAT_F4HWN_RX_TX_TIMER   := 0
+override ENABLE_FEAT_F4HWN_RESUME_STATE  := 0
+override ENABLE_FEAT_F4HWN_NARROWER      := 0
+override ENABLE_FEAT_F4HWN_INV           := 0
+override ENABLE_FEAT_F4HWN_CTR           := 0
+override ENABLE_FEAT_F4HWN_CA            := 0
+endif
+
 ifeq ($(ENABLE_FEAT_F4HWN),1)
 	TARGET = f4hwn
 else
@@ -325,6 +353,9 @@ CFLAGS += -DENABLE_FOX_MODE
 endif
 ifeq ($(ENABLE_TEAM_MODE),1)
 CFLAGS += -DENABLE_TEAM_MODE
+endif
+ifeq ($(SAR_TEAM_BUILD),1)
+CFLAGS += -DSAR_TEAM_BUILD
 endif
 ifeq ($(ENABLE_SWD),1)
 	CFLAGS += -DENABLE_SWD
