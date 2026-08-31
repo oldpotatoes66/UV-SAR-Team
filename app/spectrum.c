@@ -88,6 +88,9 @@ static uint8_t foxSignalCalCount = 0;
 static int32_t foxNoiseFloorQ8 = -(120 << 8);
 static bool foxOverload = false;
 static uint8_t foxOverloadCount = 0;
+static uint16_t foxListenTicks = 0;
+static uint16_t foxListenDuration = 100;
+static bool foxListenAudioOn = false;
 #endif
 
 State currentState = SPECTRUM, previousState = SPECTRUM;
@@ -256,7 +259,8 @@ static void FoxPlayCue(int score)
     uint8_t period;
     uint16_t tone;
 
-    if (!foxSoundEnabled || foxSignalState != FOX_SIGNAL_TARGET || foxGainSettle)
+    if (!foxSoundEnabled || foxListenTicks ||
+        foxSignalState != FOX_SIGNAL_TARGET || foxGainSettle)
         return;
 
     period = score >= 80 ? 2 : (score >= 60 ? 4 :
@@ -371,6 +375,25 @@ static void FoxProcessMeasurement(void)
                     foxSignalState = FOX_SIGNAL_LOST;
                 }
             }
+        }
+    }
+    if (foxListenTicks) {
+        bool shouldListen = foxSignalState == FOX_SIGNAL_TARGET;
+
+        foxListenTicks--;
+        if (shouldListen != foxListenAudioOn) {
+            foxListenAudioOn = shouldListen;
+            if (shouldListen) {
+                RADIO_SetModulation(settings.modulationType);
+                FoxApplyGain();
+                AUDIO_AudioPathOn();
+            } else {
+                BK4819_SetAF(BK4819_AF_MUTE);
+            }
+        }
+        if (!foxListenTicks) {
+            foxListenAudioOn = false;
+            BK4819_SetAF(BK4819_AF_MUTE);
         }
     }
     if (++foxTrendCounter >= 5) {
@@ -699,6 +722,9 @@ static void FoxEnter(uint32_t frequency)
     foxNoiseFloorQ8 = -(120 << 8);
     foxOverload = false;
     foxOverloadCount = 0;
+    foxListenTicks = 0;
+    foxListenDuration = 100;
+    foxListenAudioOn = false;
     monitorMode = true;
     menuState = 0;
     FoxSetGain(0);
@@ -1646,6 +1672,22 @@ void OnKeyDownStill(KEY_Code_t key)
 #endif
         monitorMode = !monitorMode;
         break;
+    case KEY_2:
+#ifdef ENABLE_FOX_MODE
+        if (foxMode) {
+            if (foxListenTicks) {
+                foxListenDuration = foxListenDuration == 50 ? 100 :
+                    (foxListenDuration == 100 ? 200 :
+                    (foxListenDuration == 200 ? 300 : 50));
+            }
+            foxListenTicks = foxListenDuration;
+            foxListenAudioOn = false;
+            BK4819_SetAF(BK4819_AF_MUTE);
+            redrawScreen = true;
+            break;
+        }
+#endif
+        break;
     case KEY_PTT:
         #ifdef ENABLE_FOX_MODE
         if (foxMode) {
@@ -1740,7 +1782,9 @@ static void RenderStill()
                                  (foxSignalState == FOX_SIGNAL_WAIT ? "WAIT" :
                                   (foxSignalState == FOX_SIGNAL_LOST ? "LOST" : "CAL"));
 
-        if (foxOverload)
+        if (foxListenTicks)
+            sprintf(String, "LISTEN %us", (foxListenTicks + 9) / 10);
+        else if (foxOverload)
             sprintf(String, "TOO CLOSE %d%%", score);
         else
             sprintf(String, "%s %s %d%%", signalName, gainName[foxGain], score);
