@@ -65,6 +65,15 @@ static bool foxFilterReady = false;
 static int32_t foxFilteredQ8 = 0;
 static uint16_t foxPeakRssi = 0;
 static uint8_t foxPeakResetTicks = 0;
+static uint8_t foxGain = 0;
+static uint8_t foxTrendCounter = 0;
+static int16_t foxLastDbm = -160;
+static int8_t foxTrend = 0;
+static int16_t foxPeakDbm = -160;
+static int16_t foxGainCorrection[] = {0, 40, 76};
+static int16_t foxGainAnchorDbm = -160;
+static uint8_t foxGainSettle = 0;
+static uint8_t foxGainTriggerCount = 0;
 #endif
 
 State currentState = SPECTRUM, previousState = SPECTRUM;
@@ -183,6 +192,103 @@ static int Rssi2DBm(uint16_t rssi)
 {
     return (rssi / 2) - 160 + dBmCorrTable[gRxVfo->Band];
 }
+
+#ifdef ENABLE_FOX_MODE
+void LockAGC(void);
+static int clamp(int v, int min, int max);
+
+static int FoxCorrectedDBm(uint16_t rssi)
+{
+    if (foxGainSettle)
+        return foxGainAnchorDbm;
+    return Rssi2DBm(rssi) + foxGainCorrection[foxGain];
+}
+
+static void FoxSetGain(uint8_t gain)
+{
+    static const uint8_t lnas[] = {3, 1, 0};
+    static const uint8_t lna[] = {7, 3, 0};
+    static const uint8_t vga[] = {7, 3, 0};
+    uint16_t reg;
+    bool calibrate;
+
+    if (gain > 2 || gain == foxGain)
+        return;
+
+    calibrate = foxGain <= 2;
+    if (calibrate)
+        foxGainAnchorDbm = FoxCorrectedDBm(scanInfo.rssi);
+    LockAGC();
+    reg = BK4819_ReadRegister(BK4819_REG_13);
+    reg &= ~((uint16_t)0x7ff);
+    reg |= ((uint16_t)lnas[gain] << 8) |
+           ((uint16_t)lna[gain] << 5) | vga[gain];
+    BK4819_WriteRegister(BK4819_REG_13, reg);
+    foxGain = gain;
+    foxFilterReady = false;
+    foxTrendCounter = 0;
+    foxGainTriggerCount = 0;
+    foxGainSettle = calibrate ? 4 : 0;
+}
+
+static void FoxProcessMeasurement(void)
+{
+    int rawDbm;
+    int dbm;
+
+    if (!foxMode)
+        return;
+
+    if (!foxFilterReady) {
+        foxFilteredQ8 = (int32_t)scanInfo.rssi << 8;
+        foxFilterReady = true;
+    } else {
+        foxFilteredQ8 += (((int32_t)scanInfo.rssi << 8) - foxFilteredQ8) >> 2;
+    }
+    scanInfo.rssi = (uint16_t)(foxFilteredQ8 >> 8);
+
+    rawDbm = Rssi2DBm(scanInfo.rssi);
+    if (foxGainSettle) {
+        foxGainSettle--;
+        if (!foxGainSettle) {
+            foxGainCorrection[foxGain] = foxGain == 0 ? 0 :
+                clamp(foxGainAnchorDbm - rawDbm, 0, 120);
+            foxFilterReady = false;
+        }
+    } else {
+        bool switchDown = (foxGain == 0 && rawDbm > -60) ||
+                          (foxGain == 1 && rawDbm > -50);
+        bool switchUp = (foxGain == 1 && rawDbm < -105) ||
+                        (foxGain == 2 && rawDbm < -100);
+
+        if (switchDown || switchUp) {
+            if (++foxGainTriggerCount >= 3)
+                FoxSetGain(foxGain + (switchDown ? 1 : -1));
+        } else {
+            foxGainTriggerCount = 0;
+        }
+    }
+
+    dbm = FoxCorrectedDBm(scanInfo.rssi);
+    if (++foxTrendCounter >= 5) {
+        int delta = dbm - foxLastDbm;
+        foxTrend = delta >= 3 ? 1 : (delta <= -3 ? -1 : 0);
+        foxLastDbm = dbm;
+        foxTrendCounter = 0;
+    }
+
+    if (foxPeakResetTicks) {
+        foxPeakResetTicks--;
+        if (!foxPeakResetTicks) {
+            foxPeakRssi = scanInfo.rssi;
+            foxPeakDbm = dbm;
+        }
+    } else if (dbm > foxPeakDbm) {
+        foxPeakRssi = scanInfo.rssi;
+        foxPeakDbm = dbm;
+    }
+}
+#endif
 
 static uint16_t GetRegMenuValue(uint8_t st)
 {
@@ -458,6 +564,35 @@ static void TuneToPeak()
     scanInfo.i = peak.i;
     SetF(scanInfo.f);
 }
+
+#ifdef ENABLE_FOX_MODE
+static void FoxEnter(uint32_t frequency)
+{
+    scanInfo.f = frequency;
+    currentFreq = frequency;
+    SetF(frequency);
+    foxMode = true;
+    foxFilterReady = false;
+    foxFilteredQ8 = 0;
+    foxPeakRssi = 0;
+    foxPeakDbm = -160;
+    foxPeakResetTicks = 0;
+    foxGain = 0xff;
+    foxTrendCounter = 0;
+    foxLastDbm = -160;
+    foxTrend = 0;
+    foxGainCorrection[0] = 0;
+    foxGainCorrection[1] = 40;
+    foxGainCorrection[2] = 76;
+    foxGainAnchorDbm = -160;
+    foxGainSettle = 0;
+    foxGainTriggerCount = 0;
+    monitorMode = true;
+    menuState = 0;
+    FoxSetGain(0);
+    SetState(STILL);
+}
+#endif
 
 static void DeInitSpectrum()
 {
@@ -1253,10 +1388,18 @@ static void OnKeyDown(uint8_t key)
         ToggleBacklight();
         break;
     case KEY_PTT:
+#ifdef ENABLE_FOX_MODE
+        UpdatePeakInfo();
+        FoxEnter(peak.f);
+#else
         SetState(STILL);
         TuneToPeak();
+#endif
         break;
     case KEY_MENU:
+#ifdef ENABLE_FOX_MODE
+        FoxEnter(gTxVfo->pRX->Frequency);
+#endif
         break;
     case KEY_EXIT:
         if (menuState)
@@ -1445,10 +1588,13 @@ static void RenderStill()
 {
 #ifdef ENABLE_FOX_MODE
     if (foxMode && !menuState) {
-        int dbm = Rssi2DBm(scanInfo.rssi);
-        uint8_t meterWidth = Rssi2PX(scanInfo.rssi, 0, 120);
+        static const char *gainName[] = {"AUTO-HI", "AUTO-LOW", "AUTO-MIN"};
+        int dbm = FoxCorrectedDBm(scanInfo.rssi);
+        int score = clamp((dbm + 120) * 100 / 80, 0, 100);
+        uint8_t meterWidth = score * 118 / 100;
 
-        UI_PrintString("FOX  RX ONLY", 0, 127, 0, 8);
+        sprintf(String, "SAR %s", gainName[foxGain]);
+        UI_PrintString(String, 0, 127, 0, 8);
         sprintf(String, "%4d", dbm);
         UI_DisplayFrequency(String, 29, 1, false);
         UI_PrintString("dBm", 94, 127, 2, 8);
@@ -1460,7 +1606,8 @@ static void RenderStill()
         if (foxPeakResetTicks)
             UI_PrintString("PEAK RESET", 0, 127, 6, 8);
         else {
-            sprintf(String, "PK %d dBm", Rssi2DBm(foxPeakRssi));
+            const char *trend = foxTrend > 0 ? "UP" : (foxTrend < 0 ? "DOWN" : "STABLE");
+            sprintf(String, "%3d%% %s", score, trend);
             UI_PrintString(String, 0, 127, 6, 8);
         }
         return;
@@ -1679,20 +1826,7 @@ static void UpdateStill()
     Measure();
 #ifdef ENABLE_FOX_MODE
     if (foxMode) {
-        if (!foxFilterReady) {
-            foxFilteredQ8 = (int32_t)scanInfo.rssi << 8;
-            foxFilterReady = true;
-        } else {
-            foxFilteredQ8 += (((int32_t)scanInfo.rssi << 8) - foxFilteredQ8) >> 2;
-        }
-        scanInfo.rssi = (uint16_t)(foxFilteredQ8 >> 8);
-        if (foxPeakResetTicks) {
-            foxPeakResetTicks--;
-            if (!foxPeakResetTicks)
-                foxPeakRssi = scanInfo.rssi;
-        } else if (scanInfo.rssi > foxPeakRssi) {
-            foxPeakRssi = scanInfo.rssi;
-        }
+        FoxProcessMeasurement();
     }
 #endif
     redrawScreen = true;
@@ -1734,6 +1868,9 @@ static void UpdateListening()
     else
     {
         Measure();
+#ifdef ENABLE_FOX_MODE
+        FoxProcessMeasurement();
+#endif
     }
 
     peak.rssi = scanInfo.rssi;
@@ -1838,6 +1975,9 @@ void APP_RunSpectrum()
 {
     // TX here coz it always? set to active VFO
     vfo = gEeprom.TX_VFO;
+#ifdef ENABLE_FOX_MODE
+    foxMode = false;
+#endif
 #ifdef ENABLE_FEAT_F4HWN_SPECTRUM
     LoadSettings();
 #endif
