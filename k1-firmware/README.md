@@ -6,9 +6,9 @@
 
 ## SAR-TEAM edition / SAR-TEAM 版本
 
-This branch includes the tested UV-K1 SAR-TEAM port. Hold digit `6` to enter TEAM; `F + 6` changes transmit power. Yaesu ARTS-compatible DCS 023N monitoring works alongside normal voice RX/PTT TX. AUTO TX is off by default and requires holding `3`. Low-battery TX lockout, a 60-second manual PTT timeout, repeated lost-link alarms, keypad lock, and per-radio callsign configuration are included.
+This branch includes the tested UV-K1 SAR-TEAM port. Hold digit `6` to enter TEAM; `F + 6` changes, saves, and applies actual transmit power. A/B permanently show independent `L1–L5 / M / H` values, with a temporary large confirmation after a change. Yaesu ARTS-compatible DCS 023N monitoring works alongside normal voice RX/PTT TX. AUTO TX is off by default and requires holding `3`; on K1 it uses the current channel power and is blocked at `M/H`. Low-battery TX lockout, a 60-second manual PTT timeout, repeated lost-link alarms, keypad lock, and per-radio callsign configuration are included. See the parent [`README.md`](../README.md) and [`docs/FEATURES.md`](../docs/FEATURES.md) for the canonical controls.
 
-本分支包含已完成真机测试的 UV-K1 SAR-TEAM 移植版：长按数字 `6` 进入 TEAM，`F + 6` 切换发射功率；ARTS 与正常语音收发可同时工作。AUTO TX 默认关闭，必须长按 `3` 明确开启；同时包含低电禁发、人工 PTT 60 秒超时、重复失联告警、锁键和每机呼号配置。
+本分支包含已完成真机测试的 UV-K1 SAR-TEAM 移植版：长按数字 `6` 进入 TEAM，`F + 6` 切换、保存并应用实际发射功率；A/B 两行持续显示各自 `L1–L5 / M / H`，调整时有大字确认。ARTS 与正常语音收发可同时工作。AUTO TX 默认关闭，必须长按 `3` 明确开启；K1 使用当前频道功率并在 `M/H` 时禁止自动轮询。同时包含低电禁发、人工 PTT 60 秒超时、重复失联告警、锁键和每机呼号配置。统一按键说明见父仓库 [`README.md`](../README.md) 与 [`docs/FEATURES.md`](../docs/FEATURES.md)。
 
 ```sh
 ./compile-with-docker.sh SarTeam

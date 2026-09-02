@@ -19,6 +19,8 @@ SAR-TEAM 为泉盛 UV-K5、UV-K6（DP32G030）和 UV-K1（PY32F071）提供两�
 
 ### 已实现功能
 
+完整的双语机型差异和按键矩阵见 [`docs/FEATURES.md`](docs/FEATURES.md)。
+
 - SAR 实时强度、趋势、峰值、`CAL/TARGET/WAIT/LOST/TOO CLOSE` 状态；
 - HI/LOW/MIN 自动接收增益；
 - 可变音调强度提示和智能语音监听；
@@ -35,6 +37,8 @@ SAR-TEAM 为泉盛 UV-K5、UV-K6（DP32G030）和 UV-K1（PY32F071）提供两�
 - TEAM 内长按 `F` 锁定配置键，PTT 和 `EXIT` 始终可用；
 - 独立 EEPROM 配置、CRC-8 校验、自动备份和写后复读验证；
 - CSV 名册逐台批量配置。
+- K1 `F+6` 实际调整并保存当前发送 VFO 功率，显示约 1.5 秒大字确认；待机画面的 A/B 两行持续显示各自 `L1–L5 / M / H`；
+- 通用频道工具支持 K6/K1 导出、导入、写后验证和备份后裁剪历史频道。
 
 ### 支持范围
 
@@ -113,7 +117,7 @@ python3 tools/team_config.py \
   --port /dev/cu.usbmodem20221234561 --model k1 show
 ```
 
-配置项：呼号（3–6 个大写字母或数字）、15/25 秒间隔、P1/P2/P3、提示音和 CW 默认状态。自动发射不能配置为默认开启，操作员每次进入 TEAM 后仍必须长按 `3` 约 1 秒明确启用。
+配置项：呼号（3–6 个大写字母或数字）、15/25 秒间隔、功率字段、提示音和 CW 默认状态。K5/K6 使用配置中的 P1/P2/P3；K1 为保持 CSV 兼容会保存该字段，但运行时使用当前频道 `L1–L5` 功率。自动发射不能配置为默认开启，操作员每次进入 TEAM 后仍必须长按 `3` 约 1 秒明确启用。
 
 ### 批量部署
 
@@ -157,16 +161,27 @@ python3 tools/channel_config.py \
 
 工具会转换两种机型不同的频道名称和扫描列表属性，保留频道号、频率、收发偏移、模拟/DCS 亚音、模式、功率、步进及锁定标志。写入前在 `channel-backups/` 备份目标机全部频道区，逐频道写后复读校验；CSV 未列出的频道保持不变。串口权限只覆盖频道记录、名称和属性，不允许修改普通设置或校准区。
 
+备份后删除编号高于 14 的历史频道：
+
+```sh
+python3 tools/channel_config.py \
+  --port /dev/cu.usbmodem20221234561 --model k1 prune --keep 14
+```
+
+`--keep` 可按任务需要更改。K1 会同时清理完整 1024 槽属性区，避免已删除记录仍被菜单计为有效频道。
+
 ### TEAM 按键
 
 - `1`：BEEP/MUTE；
 - `2`：15/25 秒；
 - 长按 `3` 约 1 秒：开启/关闭 AUTO TX（短按无效）；
-- `4`：P1/P2/P3；
+- `4`：仅 K5/K6 使用，切换 P1/P2/P3；K1 的 AUTO TX 使用当前频道 `L1–L5` 功率；
 - `5`：开启/关闭 CW；
 - 长按 `F`：锁定/解锁数字配置键；
 - PTT：正常语音发射并携带 DCS 023N；
 - `EXIT`：立即停止并退出。
+
+K1 若处于 `M/H`，AUTO TX 会被安全阻止。退出 TEAM，用 `F+6` 选择 `L1–L5` 后重新进入。K5/K6 则使用 TEAM 内独立的 P1/P2/P3。
 
 ## English
 
@@ -180,6 +195,8 @@ SAR-TEAM adds two field-oriented modes to Quansheng UV-K5/UV-K6 (DP32G030) and U
 The public firmware never uses the author's callsign as a team member's identity. Release metadata credits `BH1JID` and lists `oldpotatoes66@gmail.com`; each radio's CW callsign and ARTS defaults remain independently stored in EEPROM by the configuration tool.
 
 ### Features
+
+See [`docs/FEATURES.md`](docs/FEATURES.md) for the canonical bilingual model and control matrix.
 
 - Live SAR strength, trend, peak, and `CAL/TARGET/WAIT/LOST/TOO CLOSE` states;
 - automatic HI/LOW/MIN receiver gain;
@@ -197,6 +214,8 @@ The public firmware never uses the author's callsign as a team member's identity
 - long-press `F` keypad lock in TEAM mode, with PTT and `EXIT` always available;
 - CRC-8 protected EEPROM configuration with automatic backup and read-back verification;
 - CSV roster mode for configuring multiple radios.
+- K1 `F+6` changes and saves actual TX power, shows a 1.5-second confirmation, and permanently displays independent A/B `L1–L5 / M / H` values;
+- common K6/K1 channel export, import, verified write, backup, and history-pruning support.
 
 ### Compatibility
 
@@ -275,7 +294,7 @@ python3 tools/team_config.py \
   --port /dev/cu.usbmodem20221234561 --model k1 show
 ```
 
-Configurable values are a 3–6 character callsign, 15/25-second interval, P1/P2/P3, alerts, and initial CW state. Automatic transmission cannot be a persistent default; the operator must explicitly hold `3` for about one second after entering TEAM mode.
+Configurable values are a 3–6 character callsign, 15/25-second interval, power field, alerts, and initial CW state. K5/K6 use the configured P1/P2/P3 value. K1 stores the field for roster portability but uses the selected channel's `L1–L5` power at runtime. Automatic transmission cannot be a persistent default; the operator must explicitly hold `3` for about one second after entering TEAM mode.
 
 ### Batch deployment
 
@@ -311,16 +330,27 @@ python3 tools/channel_config.py \
 
 The tool converts the different name and scan-list attributes while preserving slot number, frequency, duplex offset, analog/DCS tones, mode, power, tuning step, and lock flags. Before an import it saves the target radio's complete channel areas under `channel-backups/`, then reads back and verifies every written channel. Slots absent from the CSV remain unchanged. Serial access is restricted to channel records, names, and attributes; general settings and calibration are not writable.
 
+To back up first and remove occupied history above channel 14:
+
+```sh
+python3 tools/channel_config.py \
+  --port /dev/cu.usbmodem20221234561 --model k1 prune --keep 14
+```
+
+Choose a different `--keep` boundary as needed. On K1, pruning also clears the full 1024-slot attribute table so erased records cannot remain visible as valid channels.
+
 ### TEAM controls
 
 - `1`: BEEP/MUTE;
 - `2`: 15/25-second interval;
 - hold `3` for about one second: enable/disable AUTO TX (a short press does nothing);
-- `4`: P1/P2/P3;
+- `4`: K5/K6 only, P1/P2/P3; K1 AUTO TX uses the current channel's `L1–L5` power;
 - `5`: enable/disable CW;
 - long-press `F`: lock/unlock configuration keys;
 - PTT: normal voice transmission with DCS 023N;
 - `EXIT`: stop immediately and leave TEAM mode.
+
+K1 blocks AUTO TX at `M/H`. Exit TEAM, select `L1–L5` with `F+6`, then re-enter. K5/K6 instead use the separate TEAM P1/P2/P3 setting.
 
 ## License and acknowledgements / 许可证与致谢
 
