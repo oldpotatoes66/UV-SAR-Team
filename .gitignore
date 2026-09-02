@@ -9,6 +9,7 @@ compile_commands.json
 .vscode
 /docs
 /team-config-backups
+/backups
 K5TOOL.log*
 *.img
 k5_eeprom.raw

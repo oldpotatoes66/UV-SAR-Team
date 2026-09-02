@@ -51,7 +51,7 @@
 #include "driver/system.h"
 #include "driver/systick.h"
 #include "driver/eeprom.h"
-#ifdef ENABLE_UART
+#if defined(ENABLE_UART) || defined(ENABLE_TEAM_CONFIG_UART)
     #include "driver/uart.h"
 #endif
 
@@ -64,7 +64,7 @@
 void _putchar(__attribute__((unused)) char c)
 {
 
-#ifdef ENABLE_UART
+#if defined(ENABLE_UART) || defined(ENABLE_TEAM_CONFIG_UART)
     UART_Send((uint8_t *)&c, 1);
 #endif
 
@@ -90,7 +90,7 @@ void Main(void)
 
     boot_counter_10ms = 250;   // 2.5 sec
 
-#ifdef ENABLE_UART
+#if defined(ENABLE_UART) || defined(ENABLE_TEAM_CONFIG_UART)
     UART_Init();
     UART_Send(UART_Version, strlen(UART_Version));
 #endif

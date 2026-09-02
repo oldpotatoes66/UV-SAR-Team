@@ -156,6 +156,8 @@ sarteam() {
     docker run -v "$FIRMWARE_DIR:/app/compiled-firmware" "$IMAGE_NAME" /bin/bash -c "\
         rm -f ./compiled-firmware/f4hwn.sar-team* && cd /app && make -s \
         SAR_TEAM_BUILD=1 \
+        AUTHOR_STRING_2=BH1JID \
+        VERSION_STRING_2=v1.0RC1 \
         EDITION_STRING=SAR-TEAM \
         TARGET=f4hwn.sar-team \
         && cp f4hwn.sar-team* compiled-firmware/"

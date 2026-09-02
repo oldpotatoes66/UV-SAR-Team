@@ -6,6 +6,7 @@
 # ---- STOCK QUANSHENG FEATURES ----
 ENABLE_FMRADIO                  ?= 0
 ENABLE_UART                     ?= 1
+ENABLE_TEAM_CONFIG_UART         ?= 0
 ENABLE_AIRCOPY                  ?= 0
 ENABLE_NOAA                     ?= 0
 ENABLE_VOICE                    ?= 0
@@ -92,9 +93,9 @@ override ENABLE_TEAM_MODE                := 1
 override ENABLE_SPECTRUM                 := 1
 override ENABLE_FOX_MODE                 := 1
 override ENABLE_FMRADIO                  := 0
-# Keep the stock UART command channel so the public team_config.py utility can
-# read and update the dedicated SAR-TEAM EEPROM configuration block.
-override ENABLE_UART                     := 1
+# The field build exposes only HELLO plus the dedicated eight-byte TEAM block.
+override ENABLE_UART                     := 0
+override ENABLE_TEAM_CONFIG_UART         := 1
 override ENABLE_AIRCOPY                  := 0
 override ENABLE_NOAA                     := 0
 override ENABLE_VOICE                    := 0
@@ -152,7 +153,7 @@ ifeq ($(ENABLE_FMRADIO),1)
 	OBJS += driver/bk1080.o
 endif
 OBJS += driver/bk4819.o
-ifeq ($(filter $(ENABLE_AIRCOPY) $(ENABLE_UART),1),1)
+ifeq ($(filter $(ENABLE_AIRCOPY) $(ENABLE_UART) $(ENABLE_TEAM_CONFIG_UART),1),1)
 	OBJS += driver/crc.o
 endif
 OBJS += driver/eeprom.o
@@ -166,7 +167,7 @@ OBJS += driver/spi.o
 OBJS += driver/st7565.o
 OBJS += driver/system.o
 OBJS += driver/systick.o
-ifeq ($(ENABLE_UART),1)
+ifeq ($(filter $(ENABLE_UART) $(ENABLE_TEAM_CONFIG_UART),1),1)
 	OBJS += driver/uart.o
 endif
 
@@ -206,6 +207,9 @@ endif
 OBJS += app/scanner.o
 ifeq ($(ENABLE_UART),1)
 	OBJS += app/uart.o
+endif
+ifeq ($(ENABLE_TEAM_CONFIG_UART),1)
+	OBJS += app/team_uart.o
 endif
 ifeq ($(ENABLE_AM_FIX), 1)
 	OBJS += am_fix.o
@@ -371,6 +375,9 @@ ifeq ($(ENABLE_FMRADIO),1)
 endif
 ifeq ($(ENABLE_UART),1)
 	CFLAGS += -DENABLE_UART
+endif
+ifeq ($(ENABLE_TEAM_CONFIG_UART),1)
+	CFLAGS += -DENABLE_TEAM_CONFIG_UART
 endif
 ifeq ($(ENABLE_BIG_FREQ),1)
 	CFLAGS  += -DENABLE_BIG_FREQ

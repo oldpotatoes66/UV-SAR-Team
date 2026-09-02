@@ -3,6 +3,7 @@
 #ifdef ENABLE_TEAM_MODE
 
 #include "../audio.h"
+#include "../board.h"
 #include "../dcs.h"
 #include "../driver/bk4819-regs.h"
 #include "../driver/bk4819.h"
@@ -13,6 +14,7 @@
 #include "../driver/system.h"
 #include "../external/printf/printf.h"
 #include "../frequencies.h"
+#include "../helper/battery.h"
 #include "../misc.h"
 #include "../radio.h"
 #include "../settings.h"
@@ -23,8 +25,10 @@
 
 #define TEAM_WEAK_TICKS 3500u
 #define TEAM_LOST_TICKS 6000u
+#define TEAM_LOST_REPEAT_TICKS 6000u
 #define TEAM_TX_DURATION_TICKS 100u
 #define TEAM_TX_ARM_DELAY_TICKS 300u
+#define TEAM_PTT_TIMEOUT_TICKS 6000u
 #define TEAM_CW_INTERVAL_TICKS 60000u
 #define TEAM_CW_DOT_MS 60u
 #define TEAM_CONFIG_ADDRESS 0x1FF8u
@@ -46,6 +50,27 @@ typedef struct {
 } TEAM_Config_t;
 
 static bool TEAM_DelayCanExit(uint16_t delayMs);
+static const char *TEAM_Feedback;
+static uint8_t TEAM_FeedbackTicks;
+
+static void TEAM_SetFeedback(const char *text)
+{
+    TEAM_Feedback = text;
+    TEAM_FeedbackTicks = 100; // Keep the confirmation visible for one second.
+}
+
+static void TEAM_UpdateBattery(void)
+{
+    BOARD_ADC_GetBatteryInfo(&gBatteryVoltages[gBatteryCheckCounter++ % 4],
+                             &gBatteryCurrent);
+    BATTERY_GetReadings(false);
+}
+
+static bool TEAM_BatteryAllowsTx(void)
+{
+    // Preserve the final few percent for reception and local alarms.
+    return gBatteryDisplayLevel > 1 && gBatteryDisplayLevel <= 6;
+}
 
 static uint8_t TEAM_ConfigCrc(const uint8_t *data)
 {
@@ -163,18 +188,23 @@ static void TEAM_Render(bool seen, uint16_t ageTicks, uint16_t carrierTicks,
                         const TEAM_Config_t *config)
 {
     char text[24];
-    const char *state = cwTransmitting ? "CW ID TX" :
+    const char *state = !TEAM_BatteryAllowsTx() ? "LOW BAT TX OFF" :
+        (cwTransmitting ? "CW ID TX" :
         (transmitting ? "TRANSMITTING" :
         (!txAllowed && autoTx ? "TX BLOCKED" :
         (!seen ? (carrierTicks < 300 ? "RF NO DCS" : "NO LINK") :
         (ageTicks < TEAM_WEAK_TICKS ? "LINK OK" :
-        (ageTicks < TEAM_LOST_TICKS ? "LINK WEAK" : "LINK LOST")))));
+        (ageTicks < TEAM_LOST_TICKS ? "LINK WEAK" : "LINK LOST"))))));
 
     memset(gFrameBuffer, 0, sizeof(gFrameBuffer));
     sprintf(text, "%u.%05u", frequency / 100000, frequency % 100000);
     UI_PrintStringSmallBold(text, 0, 127, 0);
     UI_PrintStringSmallBold(autoTx ? "TEAM AUTO TX" : "TEAM RX ONLY", 18, 110, 1);
-    UI_PrintStringSmallBold(state, 24, 112, 2);
+    if (TEAM_FeedbackTicks) {
+        UI_PrintStringSmallBold(TEAM_Feedback, 10, 118, 2);
+    } else {
+        UI_PrintStringSmallBold(state, 24, 112, 2);
+    }
     if (cwEnabled && config->valid) {
         sprintf(text, "CW %s", config->callSign);
         UI_PrintStringSmallBold(text, 30, 100, 3);
@@ -184,7 +214,8 @@ static void TEAM_Render(bool seen, uint16_t ageTicks, uint16_t carrierTicks,
 
     // DCS numbers use octal digits. DCS_Options stores their numeric value, so
     // 0x13 (decimal 19) must be rendered as octal 023.
-    sprintf(text, "DCS %03oN", DCS_Options[dcsCode]);
+    sprintf(text, "DCS %03oN B%u%%", DCS_Options[dcsCode],
+            BATTERY_VoltsToPercent(gBatteryVoltageAverage));
     UI_PrintStringSmallBold(text, 8, 72, 4);
     if (seen) {
         sprintf(text, "%d dBm", lastDbm);
@@ -260,7 +291,7 @@ static bool TEAM_TransmitPoll(uint8_t dcsCode, uint32_t frequency,
 static bool TEAM_TransmitVoice(uint8_t dcsCode, uint32_t frequency,
                                uint8_t txBias)
 {
-    uint16_t timeoutTicks = 18000; // Three-minute stuck-PTT safety limit.
+    uint16_t timeoutTicks = TEAM_PTT_TIMEOUT_TICKS;
 
     TEAM_BeginTransmit(frequency, txBias);
     BK4819_SetCDCSSCodeWord(DCS_GetGolayCodeWord(CODE_TYPE_DIGITAL, dcsCode));
@@ -352,12 +383,17 @@ void TEAM_Run(void)
     uint8_t txInterval = config.txInterval;
     uint16_t txCountdown = 0;
     uint16_t cwCountdown = 0;
+    uint16_t lostRepeatCountdown = 0;
     // P3 matches the capped low-power bias used by the t0.7 build that was
     // verified with both VX-6R and VX-8R. P1/P2 are optional close-range modes.
     uint8_t powerLevel = config.powerLevel;
     uint8_t txBias = powerLevel * 5;
     uint8_t fHoldTicks = 0;
     bool fHoldHandled = false;
+    uint8_t key3HoldTicks = 0;
+    bool key3HoldHandled = false;
+    bool pttTimedOut = false;
+    uint8_t batteryTicks = 0;
     KEY_Code_t previousKey = KEY_INVALID;
     int lastDbm = -160;
     uint16_t oldInterruptMask = BK4819_ReadRegister(BK4819_REG_3F);
@@ -365,6 +401,9 @@ void TEAM_Run(void)
     VFO_Info_t *oldCurrentVfo = gCurrentVfo;
 
     AUDIO_AudioPathOff();
+    for (uint8_t i = 0; i < 4; i++)
+        TEAM_UpdateBattery();
+    txAllowed = txAllowed && TEAM_BatteryAllowsTx();
     gRxVfo = gTxVfo;
     gCurrentVfo = gTxVfo;
     TEAM_ConfigureReceiver(dcsCode);
@@ -386,6 +425,7 @@ void TEAM_Run(void)
                 gEeprom.KEY_LOCK = !gEeprom.KEY_LOCK;
                 gRequestSaveSettings = true;
                 fHoldHandled = true;
+                TEAM_SetFeedback(gEeprom.KEY_LOCK ? "KEY LOCKED" : "KEY UNLOCKED");
                 renderTicks = 10;
             }
         } else {
@@ -397,7 +437,7 @@ void TEAM_Run(void)
         // the background. Manual PTT always takes priority over scheduled
         // polls; DCS remains present so Yaesu ARTS continues to recognize us.
         if (!GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT)) {
-            if (txAllowed) {
+            if (!pttTimedOut && txAllowed) {
                 if (rxAudioOn) {
                     TEAM_SetReceiveAudio(false);
                     rxAudioOn = false;
@@ -408,33 +448,59 @@ void TEAM_Run(void)
                             cwTransmitting, &config);
                 if (!TEAM_TransmitVoice(dcsCode, frequency, txBias))
                     break;
+                if (!GPIO_CheckBit(&GPIOC->DATA, GPIOC_PIN_PTT)) {
+                    TEAM_SetFeedback("TX TIMEOUT 60S");
+                    pttTimedOut = true;
+                }
                 carrierTicks = 0xFFFF;
                 if (autoTx)
                     txCountdown = (uint16_t)txInterval * 100;
-                SYSTEM_DelayMs(50);
+            } else if (!pttTimedOut && previousKey != KEY_PTT) {
+                TEAM_SetFeedback(TEAM_BatteryAllowsTx()
+                    ? "TX BLOCKED" : "LOW BAT TX OFF");
             }
             previousKey = KEY_PTT;
+            SYSTEM_DelayMs(10);
             continue;
         }
-        if (!gEeprom.KEY_LOCK && key == KEY_3 && previousKey != KEY_3) {
-            autoTx = !autoTx;
-            txCountdown = autoTx ? TEAM_TX_ARM_DELAY_TICKS : 0;
+        pttTimedOut = false;
+
+        // AUTO TX is deliberately a long-press action. A brief accidental
+        // press must never arm an unattended transmitter in the field.
+        if (!gEeprom.KEY_LOCK && key == KEY_3) {
+            if (!key3HoldHandled && key3HoldTicks < 100 && ++key3HoldTicks >= 100) {
+                autoTx = !autoTx;
+                txCountdown = autoTx ? TEAM_TX_ARM_DELAY_TICKS : 0;
+                TEAM_SetFeedback(autoTx ? "AUTO TX ARMED" : "AUTO TX OFF");
+                key3HoldHandled = true;
+            }
+        } else {
+            key3HoldTicks = 0;
+            key3HoldHandled = false;
         }
         if (!gEeprom.KEY_LOCK && key == KEY_2 && previousKey != KEY_2) {
             txInterval = txInterval == 25 ? 15 : 25;
             if (autoTx)
                 txCountdown = (uint16_t)txInterval * 100;
+            TEAM_SetFeedback(txInterval == 25 ? "POLL 25 SEC" : "POLL 15 SEC");
         }
-        if (!gEeprom.KEY_LOCK && key == KEY_1 && previousKey != KEY_1)
+        if (!gEeprom.KEY_LOCK && key == KEY_1 && previousKey != KEY_1) {
             alertSound = !alertSound;
+            TEAM_SetFeedback(alertSound ? "BEEP ON" : "BEEP OFF");
+        }
         if (!gEeprom.KEY_LOCK && key == KEY_4 && previousKey != KEY_4) {
             powerLevel = powerLevel == 3 ? 1 : powerLevel + 1;
             txBias = powerLevel * 5;
+            TEAM_SetFeedback(powerLevel == 1 ? "POWER P1" :
+                             (powerLevel == 2 ? "POWER P2" : "POWER P3"));
         }
         if (!gEeprom.KEY_LOCK && key == KEY_5 && previousKey != KEY_5) {
             if (config.valid) {
                 cwEnabled = !cwEnabled;
                 cwCountdown = cwEnabled ? TEAM_TX_ARM_DELAY_TICKS : 0;
+                TEAM_SetFeedback(cwEnabled ? "CW ON" : "CW OFF");
+            } else {
+                TEAM_SetFeedback("ID NOT SET");
             }
         }
         previousKey = key;
@@ -451,6 +517,7 @@ void TEAM_Run(void)
                 seen = true;
                 ageTicks = 0;
                 lostAlerted = false;
+                lostRepeatCountdown = 0;
                 lastDbm = (rssi / 2) - 160 + dBmCorrTable[gTxVfo->Band];
                 if (recovered && alertSound && !TEAM_PlayAlert(true, dcsCode))
                     break;
@@ -482,8 +549,18 @@ void TEAM_Run(void)
             ageTicks++;
         if (seen && !lostAlerted && ageTicks >= TEAM_LOST_TICKS) {
             lostAlerted = true;
+            lostRepeatCountdown = TEAM_LOST_REPEAT_TICKS;
             if (alertSound && !TEAM_PlayAlert(false, dcsCode))
                 break;
+        }
+        if (lostAlerted) {
+            if (lostRepeatCountdown)
+                lostRepeatCountdown--;
+            else {
+                lostRepeatCountdown = TEAM_LOST_REPEAT_TICKS;
+                if (alertSound && !TEAM_PlayAlert(false, dcsCode))
+                    break;
+            }
         }
         if (carrierTicks < 65000)
             carrierTicks++;
@@ -535,10 +612,25 @@ void TEAM_Run(void)
         }
         if (++renderTicks >= 10) {
             renderTicks = 0;
+            if (TEAM_FeedbackTicks)
+                TEAM_FeedbackTicks = TEAM_FeedbackTicks > 10
+                    ? TEAM_FeedbackTicks - 10 : 0;
             TEAM_Render(seen, ageTicks, carrierTicks, lastDbm, dcsCode,
                         frequency, autoTx, transmitting, txAllowed,
                         txCountdown, txInterval, powerLevel, alertSound,
                         cwEnabled, cwTransmitting, &config);
+        }
+        if (++batteryTicks >= 50) {
+            batteryTicks = 0;
+            TEAM_UpdateBattery();
+            txAllowed = gTxVfo->Modulation == MODULATION_FM &&
+                        TX_freq_check(frequency) == 0 && TEAM_BatteryAllowsTx();
+            if (!txAllowed && autoTx) {
+                autoTx = false;
+                txCountdown = 0;
+                TEAM_SetFeedback(TEAM_BatteryAllowsTx()
+                    ? "TX BLOCKED" : "LOW BAT TX OFF");
+            }
         }
         SYSTEM_DelayMs(10);
     }

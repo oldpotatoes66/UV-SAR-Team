@@ -37,7 +37,7 @@
 #include "app/main.h"
 #include "app/menu.h"
 #include "app/scanner.h"
-#ifdef ENABLE_UART
+#if defined(ENABLE_UART) || defined(ENABLE_TEAM_CONFIG_UART)
     #include "app/uart.h"
 #endif
 #include "ARMCM0.h"
@@ -1363,7 +1363,7 @@ void APP_TimeSlice10ms(void)
     }
 #endif
 
-#ifdef ENABLE_UART
+#if defined(ENABLE_UART) || defined(ENABLE_TEAM_CONFIG_UART)
     if (UART_IsCommandAvailable()) {
         __disable_irq();
         UART_HandleCommand();

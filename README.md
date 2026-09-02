@@ -15,7 +15,7 @@ UV-K5 SAR-TEAM 为泉盛 UV-K5、UV-K6 及兼容 DP32G030 机型提供两套现�
 - `F + 5`：SAR 无线电测向，显示相对信号强度、dBm、趋势、峰值和自动增益；
 - `F + 6`：TEAM LINK，与 Yaesu VX-6R、VX-7R、VX-8R 的 ARTS/DCS 023N 轮询兼容，同时保留正常语音收发。
 
-公开固件不包含任何个人呼号。每台电台的呼号和 ARTS 默认参数通过配置脚本写入 EEPROM，适合救援队批量部署。
+公开固件不会把作者呼号当作队员呼号。版本署名为 `BH1JID`，项目联系邮箱为 `oldpotatoes66@gmail.com`；每台电台用于 CW 识别的呼号和 ARTS 默认参数仍由配置脚本独立写入 EEPROM。
 
 ### 已实现功能
 
@@ -26,7 +26,11 @@ UV-K5 SAR-TEAM 为泉盛 UV-K5、UV-K6 及兼容 DP32G030 机型提供两套现�
 - Yaesu ARTS 兼容的 DCS 023N 接收和低功率自动轮询；
 - `LINK OK / LINK WEAK / LINK LOST`、RSSI 和最后接收时间；
 - 失联三连低音和恢复双高音；
+- 失联状态持续存在时每 60 秒重复三连低音告警；
 - TEAM 内正常接收语音和 PTT 语音发射；
+- 屏幕显示电量百分比，低电量时禁止人工、自动轮询和 CW 发射；
+- 人工 PTT 最长 60 秒，超时后必须松开 PTT 才能再次发射；
+- 数字配置键显示约 1 秒的大字确认，长按 `3` 才能开启 AUTO TX；
 - 可选 CW 呼号，每 10 分钟识别一次；
 - TEAM 内长按 `F` 锁定配置键，PTT 和 `EXIT` 始终可用；
 - 独立 EEPROM 配置、CRC-8 校验、自动备份和写后复读验证；
@@ -54,7 +58,7 @@ UV-K5 SAR-TEAM 为泉盛 UV-K5、UV-K6 及兼容 DP32G030 机型提供两套现�
 compiled-firmware/f4hwn.sar-team.packed.bin
 ```
 
-公开构建不接受编译时呼号，避免批量设备误用开发者呼号。
+版本画面显示作者署名 `BH1JID`。它不是设备的 CW/队员呼号，不会替代配置脚本写入的每机呼号。
 
 ### 刷机
 
@@ -88,7 +92,7 @@ Linux 串口通常是 `/dev/ttyUSB0`。查看当前配置：
 python3 tools/team_config.py --port /dev/ttyUSB0 show
 ```
 
-配置项：呼号（3–6 个大写字母或数字）、15/25 秒间隔、P1/P2/P3、提示音和 CW 默认状态。自动发射不能配置为默认开启，操作员每次进入 TEAM 后仍必须按 `3` 明确启用。
+配置项：呼号（3–6 个大写字母或数字）、15/25 秒间隔、P1/P2/P3、提示音和 CW 默认状态。自动发射不能配置为默认开启，操作员每次进入 TEAM 后仍必须长按 `3` 约 1 秒明确启用。
 
 ### 批量部署
 
@@ -114,7 +118,7 @@ python3 tools/team_config.py \
 
 - `1`：BEEP/MUTE；
 - `2`：15/25 秒；
-- `3`：开启/关闭 AUTO TX；
+- 长按 `3` 约 1 秒：开启/关闭 AUTO TX（短按无效）；
 - `4`：P1/P2/P3；
 - `5`：开启/关闭 CW；
 - 长按 `F`：锁定/解锁数字配置键；
@@ -130,7 +134,7 @@ UV-K5 SAR-TEAM adds two field-oriented modes to Quansheng UV-K5, UV-K6, and comp
 - `F + 5`: SAR radio direction finding with relative strength, dBm, trend, peak hold, and automatic gain control;
 - `F + 6`: TEAM LINK, compatible with Yaesu VX-6R/VX-7R/VX-8R ARTS polling using DCS 023N while retaining normal voice receive and PTT transmit.
 
-The public firmware contains no personal callsign. Callsigns and ARTS defaults are stored per radio in EEPROM with a standalone configuration tool, making the project suitable for team deployments.
+The public firmware never uses the author's callsign as a team member's identity. Release metadata credits `BH1JID` and lists `oldpotatoes66@gmail.com`; each radio's CW callsign and ARTS defaults remain independently stored in EEPROM by the configuration tool.
 
 ### Features
 
@@ -141,7 +145,11 @@ The public firmware contains no personal callsign. Callsigns and ARTS defaults a
 - Yaesu ARTS-compatible DCS 023N receive and low-power polling;
 - `LINK OK / LINK WEAK / LINK LOST`, RSSI, and last-heard timer;
 - three-tone lost-link alarm and two-tone recovery alert;
+- repeated three-tone lost-link alarm every 60 seconds while the link remains lost;
 - normal voice RX and manual PTT voice TX inside TEAM mode;
+- battery percentage display and low-battery lockout for manual, automatic-poll, and CW transmission;
+- 60-second manual PTT timeout; PTT must be released before transmitting again;
+- one-second key confirmations and long-press `3` protection for AUTO TX;
 - optional CW callsign identification every ten minutes;
 - long-press `F` keypad lock in TEAM mode, with PTT and `EXIT` always available;
 - CRC-8 protected EEPROM configuration with automatic backup and read-back verification;
@@ -169,7 +177,7 @@ Output:
 compiled-firmware/f4hwn.sar-team.packed.bin
 ```
 
-Public builds do not accept a compile-time callsign, preventing a developer identity from being copied to every radio.
+The version screen credits `BH1JID`. This is release attribution, not the radio's CW/team callsign, and does not replace the per-radio identity written by the configuration tool.
 
 ### Flashing
 
@@ -203,7 +211,7 @@ On macOS, the port is commonly `/dev/cu.usbserial-0001`. Read the current config
 python3 tools/team_config.py --port /dev/cu.usbserial-0001 show
 ```
 
-Configurable values are a 3–6 character callsign, 15/25-second interval, P1/P2/P3, alerts, and initial CW state. Automatic transmission cannot be a persistent default; the operator must explicitly press `3` after entering TEAM mode.
+Configurable values are a 3–6 character callsign, 15/25-second interval, P1/P2/P3, alerts, and initial CW state. Automatic transmission cannot be a persistent default; the operator must explicitly hold `3` for about one second after entering TEAM mode.
 
 ### Batch deployment
 
@@ -221,7 +229,7 @@ The tool writes only the eight-byte SAR-TEAM block at EEPROM `0x1FF8–0x1FFF`. 
 
 - `1`: BEEP/MUTE;
 - `2`: 15/25-second interval;
-- `3`: enable/disable AUTO TX;
+- hold `3` for about one second: enable/disable AUTO TX (a short press does nothing);
 - `4`: P1/P2/P3;
 - `5`: enable/disable CW;
 - long-press `F`: lock/unlock configuration keys;
@@ -229,6 +237,8 @@ The tool writes only the eight-byte SAR-TEAM block at EEPROM `0x1FF8–0x1FFF`. 
 - `EXIT`: stop immediately and leave TEAM mode.
 
 ## License and acknowledgements / 许可证与致谢
+
+Maintainer / 维护者: **BH1JID** — `oldpotatoes66@gmail.com`
 
 Licensed under the Apache License 2.0. This project builds on work by the Quansheng open-source community, including F4HWN, Egzumer, Fagci, OneOfEleven, and DualTachyon. Preserve upstream copyright and license notices when redistributing.
 
