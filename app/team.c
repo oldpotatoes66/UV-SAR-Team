@@ -150,7 +150,7 @@ static void TEAM_SetReceiveAudio(bool enabled)
     }
 }
 
-static bool TEAM_PlayAlert(bool recovered, uint8_t dcsCode)
+static bool TEAM_PlayAlert(bool recovered, uint8_t dcsCode, bool playSound)
 {
     uint8_t count = recovered ? 2 : 3;
     uint16_t tone = recovered ? 1000 : 440;
@@ -158,24 +158,37 @@ static bool TEAM_PlayAlert(bool recovered, uint8_t dcsCode)
 
     // These are local speaker tones only. Rebuild the receive path afterwards
     // because the tone generator temporarily replaces BK4819 RX audio routing.
-    BK4819_PlayTone(tone, true);
-    AUDIO_AudioPathOn();
+    if (playSound) {
+        BK4819_PlayTone(tone, true);
+        AUDIO_AudioPathOn();
+    }
     while (count--) {
-        BK4819_ExitTxMute();
+        if (!recovered)
+            GPIO_SetBit(&GPIOC->DATA, GPIOC_PIN_FLASHLIGHT);
+        if (playSound)
+            BK4819_ExitTxMute();
         if (!TEAM_DelayCanExit(recovered ? 100 : 450)) {
             completed = false;
-            BK4819_EnterTxMute();
+            if (playSound)
+                BK4819_EnterTxMute();
+            GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_FLASHLIGHT);
             break;
         }
-        BK4819_EnterTxMute();
+        if (playSound)
+            BK4819_EnterTxMute();
+        if (!recovered)
+            GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_FLASHLIGHT);
         if (count && !TEAM_DelayCanExit(recovered ? 100 : 150)) {
             completed = false;
             break;
         }
     }
-    AUDIO_AudioPathOff();
-    BK4819_TurnsOffTones_TurnsOnRX();
-    TEAM_ConfigureReceiver(dcsCode);
+    GPIO_ClearBit(&GPIOC->DATA, GPIOC_PIN_FLASHLIGHT);
+    if (playSound) {
+        AUDIO_AudioPathOff();
+        BK4819_TurnsOffTones_TurnsOnRX();
+        TEAM_ConfigureReceiver(dcsCode);
+    }
     return completed;
 }
 
@@ -519,7 +532,7 @@ void TEAM_Run(void)
                 lostAlerted = false;
                 lostRepeatCountdown = 0;
                 lastDbm = (rssi / 2) - 160 + dBmCorrTable[gTxVfo->Band];
-                if (recovered && alertSound && !TEAM_PlayAlert(true, dcsCode))
+                if (recovered && alertSound && !TEAM_PlayAlert(true, dcsCode, true))
                     break;
             }
             // Voice follows carrier squelch, while DCS independently updates
@@ -550,7 +563,7 @@ void TEAM_Run(void)
         if (seen && !lostAlerted && ageTicks >= TEAM_LOST_TICKS) {
             lostAlerted = true;
             lostRepeatCountdown = TEAM_LOST_REPEAT_TICKS;
-            if (alertSound && !TEAM_PlayAlert(false, dcsCode))
+            if (!TEAM_PlayAlert(false, dcsCode, alertSound))
                 break;
         }
         if (lostAlerted) {
@@ -558,7 +571,7 @@ void TEAM_Run(void)
                 lostRepeatCountdown--;
             else {
                 lostRepeatCountdown = TEAM_LOST_REPEAT_TICKS;
-                if (alertSound && !TEAM_PlayAlert(false, dcsCode))
+                if (!TEAM_PlayAlert(false, dcsCode, alertSound))
                     break;
             }
         }

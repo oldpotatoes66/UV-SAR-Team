@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Configure SAR-TEAM callsign and ARTS defaults in UV-K5/K6 EEPROM."""
+"""Configure SAR-TEAM callsign and ARTS defaults in UV-K5/K6/K1."""
 
 import argparse
 import csv
@@ -16,7 +16,7 @@ except ImportError:
     serial = None
 
 
-EEPROM_ADDRESS = 0x1FF8
+EEPROM_ADDRESSES = {"k5": 0x1FF8, "k1": 0xD000}
 CONFIG_TAG = 0xA0
 CONFIG_TAG_MASK = 0xE0
 CALLSIGN_LEN = 6
@@ -54,10 +54,11 @@ def xor_data(data):
 
 
 class Radio:
-    def __init__(self, port):
+    def __init__(self, port, eeprom_address):
         if serial is None:
             raise RadioError("pyserial is required: python3 -m pip install pyserial")
         self.serial = serial.Serial(port, 38400, timeout=1)
+        self.eeprom_address = eeprom_address
 
     def close(self):
         self.serial.close()
@@ -91,7 +92,7 @@ class Radio:
 
     def read_config(self):
         payload = b"\x1B\x05\x08\x00" + \
-            struct.pack("<HBB", EEPROM_ADDRESS, 8, 0) + b"\x6A\x39\x57\x64"
+            struct.pack("<HBB", self.eeprom_address, 8, 0) + b"\x6A\x39\x57\x64"
         self.send(payload)
         reply = self.receive()
         data = reply[8:16]
@@ -103,12 +104,12 @@ class Radio:
         if len(data) != 8:
             raise ValueError("configuration must be exactly 8 bytes")
         payload = b"\x1D\x05" + struct.pack("<BBHBB", 16, 0,
-                  EEPROM_ADDRESS, 8, 1) + b"\x6A\x39\x57\x64" + data
+                  self.eeprom_address, 8, 1) + b"\x6A\x39\x57\x64" + data
         self.send(payload)
         reply = self.receive()
         if len(reply) < 6 or reply[0] != 0x1E or \
-                reply[4] != (EEPROM_ADDRESS & 0xFF) or \
-                reply[5] != (EEPROM_ADDRESS >> 8):
+                reply[4] != (self.eeprom_address & 0xFF) or \
+                reply[5] != (self.eeprom_address >> 8):
             raise RadioError("radio did not confirm the EEPROM write")
 
 
@@ -148,12 +149,12 @@ def decode_config(data):
     }
 
 
-def save_backup(directory, firmware, data, label=""):
+def save_backup(directory, firmware, address, data, label=""):
     directory.mkdir(parents=True, exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     suffix = "-" + re.sub(r"[^A-Za-z0-9_-]+", "_", label) if label else ""
     path = directory / f"team-config-{stamp}{suffix}.json"
-    record = {"firmware": firmware, "address": hex(EEPROM_ADDRESS),
+    record = {"firmware": firmware, "address": hex(address),
               "configuration": decode_config(data)}
     path.write_text(json.dumps(record, indent=2, ensure_ascii=False) + "\n",
                     encoding="utf-8")
@@ -172,6 +173,8 @@ def main():
         description="Configure SAR-TEAM callsign and ARTS defaults")
     parser.add_argument("--port", required=True,
                         help="serial port, e.g. /dev/cu.usbserial-0001")
+    parser.add_argument("--model", choices=("k5", "k1"), default="k5",
+                        help="radio family; K1 uses its dedicated USB config area")
     parser.add_argument("--backup-dir", type=Path,
                         default=Path("team-config-backups"))
     sub = parser.add_subparsers(dest="command", required=True)
@@ -187,12 +190,13 @@ def main():
     batch = sub.add_parser("batch", help="configure multiple radios from a CSV roster")
     batch.add_argument("--csv", type=Path, required=True)
     args = parser.parse_args()
+    eeprom_address = EEPROM_ADDRESSES[args.model]
 
     if args.command == "clear" and not args.yes:
         parser.error("clear requires --yes")
 
     def program(wanted=None, label=""):
-        radio = Radio(args.port)
+        radio = Radio(args.port, eeprom_address)
         try:
             firmware = radio.hello()
             current = radio.read_config()
@@ -201,7 +205,8 @@ def main():
                 print(json.dumps(decode_config(current), indent=2,
                                  ensure_ascii=False))
                 return
-            backup = save_backup(args.backup_dir, firmware, current, label)
+            backup = save_backup(args.backup_dir, firmware, eeprom_address,
+                                 current, label)
             print(f"Backup: {backup}")
             radio.write_config(wanted)
             actual = radio.read_config()

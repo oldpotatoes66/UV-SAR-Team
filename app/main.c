@@ -255,7 +255,10 @@ static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
 
         case KEY_6:
 #ifdef ENABLE_TEAM_MODE
-            if (beep) {
+            // A held digit reaches this function with beep=false, while F+digit
+            // uses beep=true. Keep F+6 as the normal power shortcut and reserve
+            // a deliberate long press of 6 for TEAM mode.
+            if (!beep) {
                 TEAM_Run();
                 gRequestDisplayScreen = DISPLAY_MAIN;
                 break;

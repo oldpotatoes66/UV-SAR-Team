@@ -1,8 +1,8 @@
-# UV-K5 SAR-TEAM
+# UV-K5 / UV-K6 / UV-K1 SAR-TEAM
 
 [中文](#中文说明) | [English](#english)
 
-Open-source SAR direction-finding and Yaesu ARTS-compatible team-safety firmware for Quansheng UV-K5/UV-K6 radios.
+Open-source SAR direction-finding and Yaesu ARTS-compatible team-safety firmware for Quansheng UV-K5, UV-K6, and UV-K1 radios.
 
 > **Safety notice / 安全提示:** This is experimental amateur-radio firmware, not certified life-safety equipment. Never use it as the only means of communication, navigation, or rescue coordination. 本项目是实验性业余无线电固件，不是经过认证的生命安全设备，不能作为通信、导航或救援协调的唯一手段。
 
@@ -10,10 +10,10 @@ Open-source SAR direction-finding and Yaesu ARTS-compatible team-safety firmware
 
 ### 项目简介
 
-UV-K5 SAR-TEAM 为泉盛 UV-K5、UV-K6 及兼容 DP32G030 机型提供两套现场功能：
+SAR-TEAM 为泉盛 UV-K5、UV-K6（DP32G030）和 UV-K1（PY32F071）提供两套现场功能。两类 MCU 使用不同固件，禁止交叉刷写：
 
 - `F + 5`：SAR 无线电测向，显示相对信号强度、dBm、趋势、峰值和自动增益；
-- `F + 6`：TEAM LINK，与 Yaesu VX-6R、VX-7R、VX-8R 的 ARTS/DCS 023N 轮询兼容，同时保留正常语音收发。
+- 长按数字 `6`：进入 TEAM LINK；`F + 6` 保留为发射功率切换。TEAM 与 Yaesu VX-6R、VX-7R、VX-8R 的 ARTS/DCS 023N 轮询兼容，同时保留正常语音收发。
 
 公开固件不会把作者呼号当作队员呼号。版本署名为 `BH1JID`，项目联系邮箱为 `oldpotatoes66@gmail.com`；每台电台用于 CW 识别的呼号和 ARTS 默认参数仍由配置脚本独立写入 EEPROM。
 
@@ -38,15 +38,16 @@ UV-K5 SAR-TEAM 为泉盛 UV-K5、UV-K6 及兼容 DP32G030 机型提供两套现�
 
 ### 支持范围
 
-- 目标硬件：Quansheng UV-K5、UV-K6 和兼容 DP32G030 机型；
-- 已测试 Bootloader：UV-K6 `3.00.02`；
+- K5/K6 固件：Quansheng UV-K5、UV-K6 和兼容 DP32G030 机型；
+- K1 固件：Quansheng UV-K1 / PY32F071；
+- 已测试 Bootloader：UV-K6 `3.00.02`、UV-K1 `7.02.02`；
 - 已完成互通测试：Yaesu VX-6R、VX-7R、VX-8R；
 - ARTS 使用 DCS 023N；
-- 不要刷入 PY32F030/PY32F071 等不同 MCU 的设备。
+- K5/K6 与 K1 二进制绝不能交叉刷写；PY32F030 仍不受支持。
 
 ### 构建
 
-需要 Docker Desktop：
+需要 Docker Desktop。构建 K5/K6 DP32G030 固件：
 
 ```sh
 ./compile-with-docker.sh sarteam
@@ -58,9 +59,20 @@ UV-K5 SAR-TEAM 为泉盛 UV-K5、UV-K6 及兼容 DP32G030 机型提供两套现�
 compiled-firmware/f4hwn.sar-team.packed.bin
 ```
 
+构建 K1 PY32F071 固件：
+
+```sh
+cd k1-firmware
+./compile-with-docker.sh SarTeam
+```
+
+输出文件：`k1-firmware/build/SarTeam/sar-team-k1.bin`。
+
 版本画面显示作者署名 `BH1JID`。它不是设备的 CW/队员呼号，不会替代配置脚本写入的每机呼号。
 
 ### 刷机
+
+K5/K6（双针编程线）：
 
 1. 关闭电台并插紧编程线；
 2. 按住 PTT 开机，进入 Bootloader；
@@ -70,6 +82,8 @@ compiled-firmware/f4hwn.sar-team.packed.bin
 
 刷写期间不要断电、拔线或让计算机休眠。务必保留原厂固件和 EEPROM 备份。
 
+K1（USB）：使用 USB-A→USB-C 数据线；部分机器不能通过 USB-C→USB-C 建立串口。关机并连接 USB，按住 PTT 开机进入黑屏 DFU；不要按侧键组合，否则可能进入 `AIR COPY`。确认 Bootloader 为 `7.02.02` 后只刷入 `sar-team-k1.bin`。正常开机时 K1 会显示 USB 串口，可用于配置呼号。
+
 ### 配置呼号与 ARTS
 
 配置时电台必须正常开机，不能处于 Bootloader：
@@ -78,7 +92,7 @@ compiled-firmware/f4hwn.sar-team.packed.bin
 python3 -m pip install pyserial
 
 python3 tools/team_config.py \
-  --port /dev/cu.usbserial-0001 configure \
+  --port /dev/cu.usbserial-0001 --model k5 configure \
   --callsign BH1ABC \
   --interval 25 \
   --power 3 \
@@ -89,7 +103,14 @@ python3 tools/team_config.py \
 Linux 串口通常是 `/dev/ttyUSB0`。查看当前配置：
 
 ```sh
-python3 tools/team_config.py --port /dev/ttyUSB0 show
+python3 tools/team_config.py --port /dev/ttyUSB0 --model k5 show
+```
+
+K1 示例（串口名以本机实际枚举结果为准）：
+
+```sh
+python3 tools/team_config.py \
+  --port /dev/cu.usbmodem20221234561 --model k1 show
 ```
 
 配置项：呼号（3–6 个大写字母或数字）、15/25 秒间隔、P1/P2/P3、提示音和 CW 默认状态。自动发射不能配置为默认开启，操作员每次进入 TEAM 后仍必须长按 `3` 约 1 秒明确启用。
@@ -108,11 +129,33 @@ Team-02,BH1AAB,25,3,on,off
 
 ```sh
 python3 tools/team_config.py \
-  --port /dev/ttyUSB0 batch \
+  --port /dev/ttyUSB0 --model k5 batch \
   --csv tools/team-roster.example.csv
 ```
 
-脚本仅写 EEPROM `0x1FF8–0x1FFF` 的 8 字节 SAR-TEAM 配置区。每台设备写入前保存旧值，写入后必须复读一致才显示 `Verified`。
+脚本只写对应机型的 8 字节 SAR-TEAM 配置区：K5/K6 为 `0x1FF8–0x1FFF`；K1 为虚拟 EEPROM `0xD000–0xD007`，固件映射到独立物理 Flash 扇区 `0x012000`，不占用校准区。每台设备写入前保存旧值，写入后必须复读一致才显示 `Verified`。批量配置同一批次必须使用相同 `--model`，混合机型应分批执行。
+
+### K6/K1 批量频道
+
+`tools/channel_config.py` 使用一份通用 CSV 在 K6 与 K1 之间迁移前 200 个存储频道。电台必须正常开机；K6 必须运行包含“频道区串口支持”的新版 SAR-TEAM 固件。
+
+先从 K6 导出已使用的频道：
+
+```sh
+python3 tools/channel_config.py \
+  --port /dev/cu.usbserial-0001 --model k6 export \
+  --csv team-channels.csv
+```
+
+再将同一文件写入 K1：
+
+```sh
+python3 tools/channel_config.py \
+  --port /dev/cu.usbmodem20221234561 --model k1 import \
+  --csv team-channels.csv
+```
+
+工具会转换两种机型不同的频道名称和扫描列表属性，保留频道号、频率、收发偏移、模拟/DCS 亚音、模式、功率、步进及锁定标志。写入前在 `channel-backups/` 备份目标机全部频道区，逐频道写后复读校验；CSV 未列出的频道保持不变。串口权限只覆盖频道记录、名称和属性，不允许修改普通设置或校准区。
 
 ### TEAM 按键
 
@@ -129,10 +172,10 @@ python3 tools/team_config.py \
 
 ### Overview
 
-UV-K5 SAR-TEAM adds two field-oriented modes to Quansheng UV-K5, UV-K6, and compatible DP32G030 radios:
+SAR-TEAM adds two field-oriented modes to Quansheng UV-K5/UV-K6 (DP32G030) and UV-K1 (PY32F071) radios. The MCU families require separate binaries and must never be cross-flashed:
 
 - `F + 5`: SAR radio direction finding with relative strength, dBm, trend, peak hold, and automatic gain control;
-- `F + 6`: TEAM LINK, compatible with Yaesu VX-6R/VX-7R/VX-8R ARTS polling using DCS 023N while retaining normal voice receive and PTT transmit.
+- Hold digit `6`: enter TEAM LINK; `F + 6` remains the transmit-power shortcut. TEAM is compatible with Yaesu VX-6R/VX-7R/VX-8R ARTS polling using DCS 023N while retaining normal voice receive and PTT transmit.
 
 The public firmware never uses the author's callsign as a team member's identity. Release metadata credits `BH1JID` and lists `oldpotatoes66@gmail.com`; each radio's CW callsign and ARTS defaults remain independently stored in EEPROM by the configuration tool.
 
@@ -157,15 +200,16 @@ The public firmware never uses the author's callsign as a team member's identity
 
 ### Compatibility
 
-- Target: Quansheng UV-K5, UV-K6, and compatible DP32G030 radios;
-- tested bootloader: UV-K6 `3.00.02`;
+- K5/K6 image: Quansheng UV-K5, UV-K6, and compatible DP32G030 radios;
+- K1 image: Quansheng UV-K1 with PY32F071;
+- tested bootloaders: UV-K6 `3.00.02`, UV-K1 `7.02.02`;
 - tested peer radios: Yaesu VX-6R, VX-7R, and VX-8R;
 - ARTS signaling: DCS 023N;
-- do not flash devices based on a different MCU such as PY32F030/PY32F071.
+- never cross-flash K5/K6 and K1 images; PY32F030 remains unsupported.
 
 ### Build
 
-Docker Desktop is required:
+Docker Desktop is required. Build the K5/K6 DP32G030 image with:
 
 ```sh
 ./compile-with-docker.sh sarteam
@@ -177,9 +221,20 @@ Output:
 compiled-firmware/f4hwn.sar-team.packed.bin
 ```
 
+Build the K1 PY32F071 image with:
+
+```sh
+cd k1-firmware
+./compile-with-docker.sh SarTeam
+```
+
+Output: `k1-firmware/build/SarTeam/sar-team-k1.bin`.
+
 The version screen credits `BH1JID`. This is release attribution, not the radio's CW/team callsign, and does not replace the per-radio identity written by the configuration tool.
 
 ### Flashing
+
+K5/K6 (two-pin programming cable):
 
 1. Power off the radio and fully insert the programming cable.
 2. Hold PTT while powering on to enter the bootloader.
@@ -189,6 +244,8 @@ The version screen credits `BH1JID`. This is release attribution, not the radio'
 
 Do not remove power or the cable during flashing. Keep verified stock-firmware and EEPROM backups.
 
+K1 (USB): use a USB-A-to-USB-C data cable; some units do not enumerate with USB-C-to-USB-C. With the radio off and USB connected, hold PTT while powering on to enter the black-screen DFU mode. Do not use a side-key combination, which may enter `AIR COPY`. Confirm bootloader `7.02.02` and flash only `sar-team-k1.bin`. In normal operation, the K1 USB serial port can configure the callsign.
+
 ### Configure callsign and ARTS defaults
 
 The radio must be running normally, not in bootloader mode:
@@ -197,7 +254,7 @@ The radio must be running normally, not in bootloader mode:
 python3 -m pip install pyserial
 
 python3 tools/team_config.py \
-  --port /dev/ttyUSB0 configure \
+  --port /dev/ttyUSB0 --model k5 configure \
   --callsign BH1ABC \
   --interval 25 \
   --power 3 \
@@ -208,7 +265,14 @@ python3 tools/team_config.py \
 On macOS, the port is commonly `/dev/cu.usbserial-0001`. Read the current configuration with:
 
 ```sh
-python3 tools/team_config.py --port /dev/cu.usbserial-0001 show
+python3 tools/team_config.py --port /dev/cu.usbserial-0001 --model k5 show
+```
+
+K1 example (use the port actually reported by your system):
+
+```sh
+python3 tools/team_config.py \
+  --port /dev/cu.usbmodem20221234561 --model k1 show
 ```
 
 Configurable values are a 3–6 character callsign, 15/25-second interval, P1/P2/P3, alerts, and initial CW state. Automatic transmission cannot be a persistent default; the operator must explicitly hold `3` for about one second after entering TEAM mode.
@@ -219,11 +283,33 @@ Copy and edit `tools/team-roster.example.csv`, then connect each normally powere
 
 ```sh
 python3 tools/team_config.py \
-  --port /dev/ttyUSB0 batch \
+  --port /dev/ttyUSB0 --model k5 batch \
   --csv tools/team-roster.example.csv
 ```
 
-The tool writes only the eight-byte SAR-TEAM block at EEPROM `0x1FF8–0x1FFF`. It backs up the previous value and reports `Verified` only after an exact read-back match.
+The tool writes only the model-specific eight-byte SAR-TEAM block: `0x1FF8–0x1FFF` on K5/K6, or virtual EEPROM `0xD000–0xD007` on K1. K1 firmware maps this to the dedicated physical Flash sector at `0x012000`, outside calibration data. It backs up the previous value and reports `Verified` only after an exact read-back match. Run mixed K5/K6 and K1 fleets as separate batches with the correct `--model`.
+
+### K6/K1 batch channels
+
+`tools/channel_config.py` uses one portable CSV to migrate the first 200 memory channels between K6 and K1 radios. Radios must be running normally, and the K6 must have the newer SAR-TEAM image with channel-only serial access.
+
+Export occupied channels from the K6:
+
+```sh
+python3 tools/channel_config.py \
+  --port /dev/cu.usbserial-0001 --model k6 export \
+  --csv team-channels.csv
+```
+
+Import the same file into the K1:
+
+```sh
+python3 tools/channel_config.py \
+  --port /dev/cu.usbmodem20221234561 --model k1 import \
+  --csv team-channels.csv
+```
+
+The tool converts the different name and scan-list attributes while preserving slot number, frequency, duplex offset, analog/DCS tones, mode, power, tuning step, and lock flags. Before an import it saves the target radio's complete channel areas under `channel-backups/`, then reads back and verifies every written channel. Slots absent from the CSV remain unchanged. Serial access is restricted to channel records, names, and attributes; general settings and calibration are not writable.
 
 ### TEAM controls
 

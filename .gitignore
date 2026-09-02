@@ -10,9 +10,16 @@ compile_commands.json
 /docs
 /team-config-backups
 /backups
+/channel-backups
 K5TOOL.log*
 *.img
 k5_eeprom.raw
 f4hwn
 f4hwn.*
 !archive/f4hwn*
+
+# Local workstation metadata and Python caches
+.DS_Store
+**/.DS_Store
+__pycache__/
+**/__pycache__/

@@ -1,8 +1,8 @@
-/* Minimal SAR-TEAM configuration protocol.
+/* Minimal SAR-TEAM configuration/channel protocol.
  *
- * Supports only the stock HELLO command and exact eight-byte reads/writes at
- * 0x1FF8. This deliberately excludes full EEPROM access, reset commands and
- * radio-register debugging from field builds.
+ * Supports HELLO, the exact eight-byte TEAM block, and 16-byte-or-smaller
+ * access to the three MR channel regions. Settings, VFO state, calibration,
+ * reset commands and radio-register debugging remain inaccessible.
  */
 
 #include <stdbool.h>
@@ -19,6 +19,13 @@
 
 #define TEAM_CONFIG_ADDRESS 0x1FF8u
 #define TEAM_CONFIG_SIZE 8u
+#define CHANNEL_RECORD_START 0x0000u
+#define CHANNEL_RECORD_END   0x0C80u
+#define CHANNEL_ATTR_START   0x0D60u
+#define CHANNEL_ATTR_END     0x0E28u
+#define CHANNEL_NAME_START   0x0F50u
+#define CHANNEL_NAME_END     0x1BD0u
+#define MAX_TRANSFER_SIZE    16u
 #define DMA_INDEX(x, y) (((x) + (y)) % sizeof(UART_DMA_Buffer))
 
 typedef struct __attribute__((packed)) {
@@ -63,29 +70,42 @@ static void SendHello(void)
     SendReply(reply, sizeof(reply));
 }
 
-static void SendReadReply(void)
+static bool IsAllowedRange(uint16_t address, uint8_t size)
 {
-    uint8_t reply[16] = {0};
+    const uint32_t end = (uint32_t)address + size;
+
+    if (size == 0 || size > MAX_TRANSFER_SIZE)
+        return false;
+    if (address == TEAM_CONFIG_ADDRESS && size == TEAM_CONFIG_SIZE)
+        return true;
+    return end <= CHANNEL_RECORD_END ||
+           (address >= CHANNEL_ATTR_START && end <= CHANNEL_ATTR_END) ||
+           (address >= CHANNEL_NAME_START && end <= CHANNEL_NAME_END);
+}
+
+static void SendReadReply(uint16_t address, uint8_t size)
+{
+    uint8_t reply[8 + MAX_TRANSFER_SIZE] = {0};
     Header_t *header = (Header_t *)reply;
 
     header->id = 0x051C;
-    header->size = 12;
-    reply[4] = TEAM_CONFIG_ADDRESS & 0xFF;
-    reply[5] = TEAM_CONFIG_ADDRESS >> 8;
-    reply[6] = TEAM_CONFIG_SIZE;
-    EEPROM_ReadBuffer(TEAM_CONFIG_ADDRESS, &reply[8], TEAM_CONFIG_SIZE);
-    SendReply(reply, sizeof(reply));
+    header->size = 4 + size;
+    reply[4] = address & 0xFF;
+    reply[5] = address >> 8;
+    reply[6] = size;
+    EEPROM_ReadBuffer(address, &reply[8], size);
+    SendReply(reply, 8 + size);
 }
 
-static void SendWriteReply(void)
+static void SendWriteReply(uint16_t address)
 {
     uint8_t reply[6] = {0};
     Header_t *header = (Header_t *)reply;
 
     header->id = 0x051E;
     header->size = 2;
-    reply[4] = TEAM_CONFIG_ADDRESS & 0xFF;
-    reply[5] = TEAM_CONFIG_ADDRESS >> 8;
+    reply[4] = address & 0xFF;
+    reply[5] = address >> 8;
     SendReply(reply, sizeof(reply));
 }
 
@@ -146,22 +166,25 @@ void UART_HandleCommand(void)
     }
 
     if (header->id == 0x051B && header->size == 8 &&
-        Command[4] == (TEAM_CONFIG_ADDRESS & 0xFF) &&
-        Command[5] == (TEAM_CONFIG_ADDRESS >> 8) &&
-        Command[6] == TEAM_CONFIG_SIZE &&
         memcmp(&Command[8], &timestamp, sizeof(timestamp)) == 0) {
-        gSerialConfigCountDown_500ms = 12;
-        SendReadReply();
-        return;
+        const uint16_t address = Command[4] | ((uint16_t)Command[5] << 8);
+        const uint8_t size = Command[6];
+        if (IsAllowedRange(address, size)) {
+            gSerialConfigCountDown_500ms = 12;
+            SendReadReply(address, size);
+            return;
+        }
     }
 
-    if (header->id == 0x051D && header->size == 16 &&
-        Command[4] == (TEAM_CONFIG_ADDRESS & 0xFF) &&
-        Command[5] == (TEAM_CONFIG_ADDRESS >> 8) &&
-        Command[6] == TEAM_CONFIG_SIZE &&
+    if (header->id == 0x051D && header->size >= 9 &&
+        header->size <= 8 + MAX_TRANSFER_SIZE &&
         memcmp(&Command[8], &timestamp, sizeof(timestamp)) == 0) {
-        gSerialConfigCountDown_500ms = 12;
-        EEPROM_WriteBuffer(TEAM_CONFIG_ADDRESS, &Command[12]);
-        SendWriteReply();
+        const uint16_t address = Command[4] | ((uint16_t)Command[5] << 8);
+        const uint8_t size = Command[6];
+        if (header->size == 8 + size && IsAllowedRange(address, size)) {
+            gSerialConfigCountDown_500ms = 12;
+            EEPROM_WriteBuffer(address, &Command[12]);
+            SendWriteReply(address);
+        }
     }
 }
