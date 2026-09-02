@@ -51,6 +51,15 @@ SAR-TEAM 为泉盛 UV-K5、UV-K6（DP32G030）和 UV-K1（PY32F071）提供两�
 
 ### 构建
 
+### 直接下载固件
+
+每个发布提交都在 [`release/latest`](release/latest) 中附带两种机型可直接刷入的固件和 `SHA256SUMS`：
+
+- `SAR-TEAM-K5-K6-DP32G030.packed.bin`：UV-K5 / UV-K6；
+- `SAR-TEAM-K1-PY32F071.bin`：UV-K1。
+
+两种固件不可交叉刷写。发布前使用 `tools/package-release.sh` 从本次源码构建结果更新发布包，然后将固件、校验值和源码改动放在同一提交中。
+
 需要 Docker Desktop。构建 K5/K6 DP32G030 固件：
 
 ```sh
@@ -227,6 +236,15 @@ See [`docs/FEATURES.md`](docs/FEATURES.md) for the canonical bilingual model and
 - never cross-flash K5/K6 and K1 images; PY32F030 remains unsupported.
 
 ### Build
+
+### Ready-to-flash downloads
+
+Every release commit includes both ready-to-flash images and `SHA256SUMS` in [`release/latest`](release/latest):
+
+- `SAR-TEAM-K5-K6-DP32G030.packed.bin`: UV-K5 / UV-K6;
+- `SAR-TEAM-K1-PY32F071.bin`: UV-K1.
+
+Never cross-flash these images. Before a release, run `tools/package-release.sh` after both builds and commit the images, checksums, and matching source changes together. `BUILD-INFO.txt` records the exact source commit used for the binaries.
 
 Docker Desktop is required. Build the K5/K6 DP32G030 image with:
 
