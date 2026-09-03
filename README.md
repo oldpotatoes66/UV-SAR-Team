@@ -64,6 +64,8 @@ SAR-TEAM 为泉盛 UV-K5、UV-K6（DP32G030）和 UV-K1（PY32F071）提供两�
 
 可以打开 **[SAR-TEAM Web Flasher](https://sar.trailspud.com/flash)**，直接在网页中选择机型并刷入固件，无需安装桌面刷机软件。
 
+频道、呼号和 ARTS 参数统一使用 **[SAR-TEAM Web Config](https://sar.trailspud.com/config)** 管理。网站源码集中维护在 `Website-SAR` 项目中，本固件仓库不再重复实现网页工具。
+
 - 使用桌面版 Chrome、Edge 或 Opera；网页刷机依赖 Web Serial，Safari、Firefox 和手机浏览器不支持；
 - K5/K6 选择 `DP32G030` 固件，K1 选择 `PY32F071` 固件，严禁交叉刷写；
 - 固件文件与串口数据只在本机浏览器中处理；
@@ -261,6 +263,8 @@ Never cross-flash these images. Before a release, run `tools/package-release.sh`
 ### Web flashing
 
 Open the **[SAR-TEAM Web Flasher](https://sar.trailspud.com/flash)** to select the radio model and flash the firmware directly from a web browser without installing a desktop flashing application.
+
+Use **[SAR-TEAM Web Config](https://sar.trailspud.com/config)** for channel, callsign, and ARTS settings. The website source is maintained centrally in the `Website-SAR` project; this firmware repository does not duplicate the web tools.
 
 - Use desktop Chrome, Edge, or Opera. Web Serial is not supported by Safari, Firefox, or mobile browsers;
 - select the `DP32G030` image for K5/K6 and the `PY32F071` image for K1—never cross-flash them;
