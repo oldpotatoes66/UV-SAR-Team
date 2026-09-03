@@ -10,7 +10,7 @@ UV-K5 SAR-TEAM 是面向泉盛 UV-K5、UV-K6（DP32G030）和 UV-K1（PY32F071�
 
 项目免费开源，欢迎无线电爱好者、志愿救援组织和开发者学习、测试与共同改进：
 
-https://github.com/oldpotatoes66/uv-k5-sar-team
+https://github.com/oldpotatoes66/UV-SAR-Team
 
 安全提示：本项目是实验性业余无线电固件，不是生命安全设备。请遵守当地频率、呼号、功率和发射规定，不要把它作为救援通信的唯一手段。刷机前确认 MCU：K5/K6 的 DP32G030 固件与 K1 的 PY32F071 固件禁止交叉刷写，PY32F030 不受支持。
 
@@ -18,7 +18,7 @@ https://github.com/oldpotatoes66/uv-k5-sar-team
 
 一台 UV-K5/K6/K1，同时拥有 SAR 测向、Yaesu ARTS 兼容团队链路和正常语音收发。对应机型固件不写死队员呼号，支持脚本与 CSV 批量配置。免费开源，欢迎测试与改进：
 
-https://github.com/oldpotatoes66/uv-k5-sar-team
+https://github.com/oldpotatoes66/UV-SAR-Team
 
 ## English
 
@@ -30,7 +30,7 @@ The public firmware contains no team-member callsign. Rescue teams can configure
 
 Free and open source—learn, test, and contribute:
 
-https://github.com/oldpotatoes66/uv-k5-sar-team
+https://github.com/oldpotatoes66/UV-SAR-Team
 
 Safety notice: experimental amateur-radio firmware is not certified life-safety equipment. Follow local frequency, callsign, power, and transmission rules, and never rely on this project as the only rescue communication system. Never cross-flash the K5/K6 DP32G030 and K1 PY32F071 images; PY32F030 is unsupported.
 
