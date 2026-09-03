@@ -60,6 +60,18 @@ SAR-TEAM 为泉盛 UV-K5、UV-K6（DP32G030）和 UV-K1（PY32F071）提供两�
 
 两种固件不可交叉刷写。发布前使用 `tools/package-release.sh` 从本次源码构建结果更新发布包，然后将固件、校验值和源码改动放在同一提交中。
 
+### 网页在线刷机
+
+可以打开 **[SAR-TEAM Web Flasher](https://sar.trailspud.com/flash)**，直接在网页中选择机型并刷入固件，无需安装桌面刷机软件。
+
+- 使用桌面版 Chrome、Edge 或 Opera；网页刷机依赖 Web Serial，Safari、Firefox 和手机浏览器不支持；
+- K5/K6 选择 `DP32G030` 固件，K1 选择 `PY32F071` 固件，严禁交叉刷写；
+- 固件文件与串口数据只在本机浏览器中处理；
+- 刷机前确认机型和 Bootloader，保留原厂固件及 EEPROM 备份；
+- 刷写期间不要断电、拔线或让计算机休眠。
+
+网站首页及完整使用说明：[`https://sar.trailspud.com/`](https://sar.trailspud.com/)
+
 需要 Docker Desktop。构建 K5/K6 DP32G030 固件：
 
 ```sh
@@ -245,6 +257,18 @@ Every release commit includes both ready-to-flash images and `SHA256SUMS` in [`r
 - `SAR-TEAM-K1-PY32F071.bin`: UV-K1.
 
 Never cross-flash these images. Before a release, run `tools/package-release.sh` after both builds and commit the images, checksums, and matching source changes together. `BUILD-INFO.txt` records the exact source commit used for the binaries.
+
+### Web flashing
+
+Open the **[SAR-TEAM Web Flasher](https://sar.trailspud.com/flash)** to select the radio model and flash the firmware directly from a web browser without installing a desktop flashing application.
+
+- Use desktop Chrome, Edge, or Opera. Web Serial is not supported by Safari, Firefox, or mobile browsers;
+- select the `DP32G030` image for K5/K6 and the `PY32F071` image for K1—never cross-flash them;
+- firmware files and serial data are processed locally in the browser;
+- verify the radio model and bootloader, and keep the factory firmware and an EEPROM backup;
+- do not disconnect power or the cable, or let the computer sleep, while flashing.
+
+Website and full instructions: [`https://sar.trailspud.com/`](https://sar.trailspud.com/)
 
 Docker Desktop is required. Build the K5/K6 DP32G030 image with:
 

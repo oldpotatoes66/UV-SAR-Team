@@ -13,6 +13,14 @@ The exact source commit and build time are recorded in `BUILD-INFO.txt`.
 
 **严禁将两种机型的固件交叉刷写。** 刷机前请使用 `SHA256SUMS` 核对文件完整性。
 
+## Web flasher / 网页在线刷机
+
+Use the **[SAR-TEAM Web Flasher](https://sar.trailspud.com/flash)** with desktop Chrome, Edge, or Opera to flash directly in the browser. Safari, Firefox, and mobile browsers do not support the required Web Serial connection.
+
+使用桌面版 Chrome、Edge 或 Opera 打开 **[SAR-TEAM 网页刷机工具](https://sar.trailspud.com/flash)**，即可在浏览器内直接刷机。Safari、Firefox 和手机浏览器不支持所需的 Web Serial 连接。
+
+Select `DP32G030` for K5/K6 or `PY32F071` for K1. Firmware and serial data are processed locally in the browser. / K5/K6 必须选择 `DP32G030`，K1 必须选择 `PY32F071`；固件和串口数据只在本机浏览器中处理。
+
 - K5/K6: power off, connect the two-pin programming cable, hold PTT while powering on, and flash the `.packed.bin` file.
 - K1: use a USB-A to USB-C data cable, power off, hold PTT while powering on to enter black-screen DFU, and flash the K1 `.bin` file.
 - Do not disconnect power or the cable during flashing. Keep the factory firmware and an EEPROM backup.
