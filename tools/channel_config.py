@@ -274,50 +274,38 @@ def save_backup(directory, model, firmware, image):
 
 def program_rows(radio, model, rows, current_image):
     layout = MODELS[model]
-    if model == "k1":
-        records = bytearray(current_image["records"])
-        names = bytearray(current_image["names"])
-        attrs = bytearray(current_image["attrs"])
-        changed = {"records": set(), "names": set(), "attrs": set()}
-        for index, name, record, scan, band in rows:
-            rec_offset = index * RECORD_SIZE
-            name_offset = index * NAME_SIZE
-            attr_offset = index * layout["attr_size"]
-            records[rec_offset:rec_offset + RECORD_SIZE] = record
-            names[name_offset:name_offset + NAME_SIZE] = name_encode(name, model)
-            attrs[attr_offset:attr_offset + 2] = attr_encode(band, scan, model)
-            changed["records"].update((rec_offset, rec_offset + 8))
-            changed["names"].update((name_offset, name_offset + 8))
-            changed["attrs"].add((attr_offset // 8) * 8)
+    records = bytearray(current_image["records"])
+    names = bytearray(current_image["names"])
+    attrs = bytearray(current_image["attrs"])
+    changed = {"records": set(), "names": set(), "attrs": set()}
+    for index, name, record, scan, band in rows:
+        rec_offset = index * RECORD_SIZE
+        name_offset = index * NAME_SIZE
+        attr_offset = index * layout["attr_size"]
+        records[rec_offset:rec_offset + RECORD_SIZE] = record
+        names[name_offset:name_offset + NAME_SIZE] = name_encode(name, model)
+        attrs[attr_offset:attr_offset + layout["attr_size"]] = \
+            attr_encode(band, scan, model)
+        changed["records"].update((rec_offset, rec_offset + 8))
+        changed["names"].update((name_offset, name_offset + 8))
+        changed["attrs"].add((attr_offset // 8) * 8)
 
-        # The K1 compatibility EEPROM writer commits exactly eight bytes per
-        # command, regardless of the request length. Always send complete
-        # aligned blocks built from the target's backup image.
-        blocks = []
-        for key, image in (("records", records), ("names", names), ("attrs", attrs)):
-            for offset in sorted(changed[key]):
-                block = bytes(image[offset:offset + 8])
-                address = layout[key] + offset
-                blocks.append((address, block))
-        for address, block in blocks:
-            radio.write(address, block)
-        for address, block in blocks:
-            if radio.read(address, 8) != block:
-                raise RadioError(f"read-back verification failed at 0x{address:04X}")
-        for number, (index, name, _record, _scan, _band) in enumerate(rows, 1):
-            print(f"[{number}/{len(rows)}] channel {index + 1}: {name or '(no name)'} OK")
-        return
-
-    for number, (index, name, record, scan, band) in enumerate(rows, 1):
-        attr = attr_encode(band, scan, model)
-        name_raw = name_encode(name, model)
-        radio.write(layout["records"] + index * RECORD_SIZE, record)
-        radio.write(layout["names"] + index * NAME_SIZE, name_raw)
-        radio.write(layout["attrs"] + index * layout["attr_size"], attr)
-        if radio.read(layout["records"] + index * RECORD_SIZE, RECORD_SIZE) != record or \
-                radio.read(layout["names"] + index * NAME_SIZE, NAME_SIZE) != name_raw or \
-                radio.read(layout["attrs"] + index * layout["attr_size"], len(attr)) != attr:
-            raise RadioError(f"read-back verification failed at channel {index + 1}")
+    # Both firmware families commit EEPROM-compatible writes in eight-byte
+    # units. Build aligned blocks from the target's backup image so short
+    # attributes never overwrite adjacent channels and 16-byte records/names
+    # are transferred as two independently acknowledged writes.
+    blocks = []
+    for key, image in (("records", records), ("names", names), ("attrs", attrs)):
+        for offset in sorted(changed[key]):
+            block = bytes(image[offset:offset + 8])
+            address = layout[key] + offset
+            blocks.append((address, block))
+    for address, block in blocks:
+        radio.write(address, block)
+    for address, block in blocks:
+        if radio.read(address, 8) != block:
+            raise RadioError(f"read-back verification failed at 0x{address:04X}")
+    for number, (index, name, _record, _scan, _band) in enumerate(rows, 1):
         print(f"[{number}/{len(rows)}] channel {index + 1}: {name or '(no name)'} OK")
 
 
