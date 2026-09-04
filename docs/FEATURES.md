@@ -42,15 +42,23 @@ This is the canonical list of currently verified behavior. K5/K6 use the DP32G03
 | `1` | BEEP/MUTE |
 | `2` | 15/25 秒轮询间隔 / poll interval |
 | 长按 `3` / hold `3` | AUTO TX ON/OFF；短按无效 / short press is ignored |
-| `4` | 仅 K5/K6：P1/P2/P3；K1 不使用此键 / K5/K6 only |
+| `4` | K5/K6：P1/P2/P3；K1：L1–L5/M/H / K5/K6 P1–P3; K1 L1–L5/M/H |
 | `5` | CW ON/OFF；未配置呼号时拒绝开启 / requires configured callsign |
 | 长按 `F` / hold `F` | 锁定/解锁数字配置键 / lock configuration keys |
 | PTT | 带 DCS 023N 的正常语音发射 / normal voice TX with DCS 023N |
 | `EXIT` | 立即停止并退出 / stop and exit immediately |
 
-K1 的 AUTO TX 使用当前频道功率，仅允许 `L1–L5`。如果当前为 `M` 或 `H`，自动轮询不会发射；先退出 TEAM，用 `F+6` 选定低功率，再重新进入。K5/K6 的 AUTO TX 使用 TEAM 内独立的 P1/P2/P3 受限功率。
+K1 的语音、AUTO TX 和 CW 均使用当前频道的实际功率。TEAM 内数字 `4` 与主界面 `F+6` 一样循环 `L1–L5/M/H`，并保存到当前频道。K5/K6 的 AUTO TX 使用 TEAM 内独立的 P1/P2/P3 功率。
 
-K1 AUTO TX uses the selected channel power and is permitted only at `L1–L5`. At `M` or `H`, automatic polls are blocked. Exit TEAM, select a low power with `F+6`, and re-enter. K5/K6 use the separate TEAM P1/P2/P3 restricted-power setting.
+K1 voice, AUTO TX, and CW use the channel's actual power. Key `4` in TEAM cycles `L1–L5/M/H`, like `F+6` on the main screen, and saves the setting to the current channel. K5/K6 use separate TEAM P1/P2/P3 power.
+
+K1 v0.2 also matches the K5/K6 field-safety behavior: CW ID transmits only while AUTO TX is armed; `EXIT` aborts a poll, CW ID, voice TX, or alert; recent carrier activity postpones an automatic transmission; and the TEAM screen continuously shows interval, alert mode, power, battery, and `RF NO DCS` diagnostics.
+
+K1 v0.5 keeps `PWR L1–L5/M/H` in a dedicated fixed position on the TEAM screen. The field reserves enough LCD width for the complete label, so the actual transmit power remains visible during RX ONLY, AUTO TX, link-state changes, countdowns, and key feedback.
+
+K1 v0.6 uses the same non-overlapping TEAM information layout as K5/K6: callsign/battery, DCS/RSSI, persistent `PWR L1–L5/M/H`/poll settings, and link age/exit state.
+
+K5/K6 v1.0RC2 reorganizes the TEAM screen into fixed, non-overlapping fields: callsign/battery, DCS/RSSI, persistent `PWR P1–P3`/poll settings, and link age/exit state.
 
 ## 配置与频道 / Configuration and channels
 

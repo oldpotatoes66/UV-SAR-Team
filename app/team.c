@@ -218,32 +218,34 @@ static void TEAM_Render(bool seen, uint16_t ageTicks, uint16_t carrierTicks,
     } else {
         UI_PrintStringSmallBold(state, 24, 112, 2);
     }
-    if (cwEnabled && config->valid) {
-        sprintf(text, "CW %s", config->callSign);
-        UI_PrintStringSmallBold(text, 30, 100, 3);
-    } else if (!config->valid) {
-        UI_PrintStringSmallBold("ID NOT SET", 30, 100, 3);
+    if (config->valid) {
+        sprintf(text, "%s %s", cwEnabled ? "CW" : "ID", config->callSign);
+        UI_PrintStringSmallBold(text, 2, 72, 3);
+    } else {
+        UI_PrintStringSmallBold("ID NOT SET", 2, 72, 3);
     }
+    sprintf(text, "B%u%%", BATTERY_VoltsToPercent(gBatteryVoltageAverage));
+    UI_PrintStringSmallBold(text, 86, 127, 3);
 
     // DCS numbers use octal digits. DCS_Options stores their numeric value, so
     // 0x13 (decimal 19) must be rendered as octal 023.
-    sprintf(text, "DCS %03oN B%u%%", DCS_Options[dcsCode],
-            BATTERY_VoltsToPercent(gBatteryVoltageAverage));
-    UI_PrintStringSmallBold(text, 8, 72, 4);
+    sprintf(text, "DCS %03oN", DCS_Options[dcsCode]);
+    UI_PrintStringSmallBold(text, 2, 60, 4);
     if (seen) {
         sprintf(text, "%d dBm", lastDbm);
-        UI_PrintStringSmallBold(text, 73, 127, 4);
-        sprintf(text, "LAST %us", ageTicks / 100);
-        UI_PrintStringSmallBold(text, 8, 92, 6);
+        UI_PrintStringSmallBold(text, 68, 127, 4);
+        sprintf(text, "T%us", ageTicks / 100);
+        UI_PrintStringSmallBold(text, 2, 58, 6);
     }
+    sprintf(text, "PWR P%u", powerLevel);
+    UI_PrintStringSmallBold(text, 2, 52, 5);
     if (autoTx) {
-        sprintf(text, "N%u I%u P%u %c", (txCountdown + 99) / 100,
-                txInterval, powerLevel, alertSound ? 'B' : 'M');
+        sprintf(text, "N%u I%u %c", (txCountdown + 99) / 100,
+                txInterval, alertSound ? 'B' : 'M');
     } else {
-        sprintf(text, "I%u P%u %s", txInterval, powerLevel,
-                alertSound ? "BEEP" : "MUTE");
+        sprintf(text, "I%u %c", txInterval, alertSound ? 'B' : 'M');
     }
-    UI_PrintStringSmallBold(text, 8, 120, 5);
+    UI_PrintStringSmallBold(text, 60, 127, 5);
     UI_PrintStringSmallBold(gEeprom.KEY_LOCK ? "LOCK EXIT" : "EXIT",
                             gEeprom.KEY_LOCK ? 74 : 96, 127, 6);
     ST7565_BlitFullScreen();
