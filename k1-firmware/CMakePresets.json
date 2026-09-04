@@ -93,7 +93,7 @@
                 "ENABLE_FMRADIO": false,
                 "ENABLE_VOX": false,
                 "ENABLE_AIRCOPY": false,
-                "ENABLE_SPECTRUM": false,
+                "ENABLE_SPECTRUM": true,
                 "ENABLE_AUDIO_BAR": false,
                 "ENABLE_SCAN_RANGES": false,
                 "ENABLE_FEAT_F4HWN_SPECTRUM": false,
@@ -107,7 +107,7 @@
                 "AUTHOR_STRING_1": "BH1JID",
                 "AUTHOR_STRING_2": "oldpotatoes66@gmail.com",
                 "VERSION_STRING_1": "SAR-TEAM",
-                "VERSION_STRING_2": "K1 v0.6",
+                "VERSION_STRING_2": "K1 v0.8-dev2",
                 "EDITION_STRING": "SAR-TEAM",
                 "TARGET": "sar-team-k1"
             }

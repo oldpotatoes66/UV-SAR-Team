@@ -251,7 +251,11 @@ static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
                 gRequestSaveVFO   = true;
                 gVfoConfigureMode = VFO_CONFIGURE_RELOAD;
 #elif defined(ENABLE_SPECTRUM)
+#ifdef ENABLE_TEAM_MODE
+                APP_RunSar();
+#else
                 APP_RunSpectrum();
+#endif
                 gRequestDisplayScreen = DISPLAY_MAIN;
 #endif
             }

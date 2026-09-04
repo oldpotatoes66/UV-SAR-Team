@@ -185,6 +185,9 @@ typedef struct PeakInfo
 } PeakInfo;
 
 void APP_RunSpectrum(void);
+#ifdef ENABLE_TEAM_MODE
+void APP_RunSar(void);
+#endif
 
 #endif /* ifndef SPECTRUM_H */
 

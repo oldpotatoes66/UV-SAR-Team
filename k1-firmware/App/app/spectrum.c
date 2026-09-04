@@ -68,6 +68,19 @@ static KeyboardState kbd = {KEY_INVALID, KEY_INVALID, 0};
 static bool menuKeyPendingShort = false;
 static bool menuKeyLongHandled = false;
 
+#ifdef ENABLE_TEAM_MODE
+// SAR is the zero-training front end.  The full bandscope remains available
+// behind MENU for operators who need it.
+static bool sarSimpleMode = false;
+static uint16_t sarNoiseFloor = 0;
+static uint16_t sarPeakRssi = 0;
+static uint8_t sarCalibrationSamples = 0;
+static uint16_t sarMissingSamples = 0;
+#define SAR_CALIBRATION_SAMPLES 20
+#define SAR_TARGET_MARGIN       16
+#define SAR_LOST_SAMPLES        10
+#endif
+
 #ifdef ENABLE_SCAN_RANGES
 static uint16_t blacklistFreqs[15];
 static uint8_t blacklistFreqsIdx;
@@ -1543,6 +1556,12 @@ static void BuildCurrentSpectrumTopY(uint8_t *topY)
 
 static void DrawStatus()
 {
+#ifdef ENABLE_TEAM_MODE
+    if (sarSimpleMode)
+        sprintf(String, "SAR FIND");
+    else
+        sprintf(String, "BS %s", manualSetFlag ? "MAN" : "AUTO");
+#else
     if (manualSetFlag)
     {
         char curStr[6];
@@ -1566,6 +1585,7 @@ static void DrawStatus()
         sprintf(String, "A:%s %c", autoSensitivityLabel[autoSensitivity],
                 scanForward ? '>' : '<');
     }
+#endif
     
     GUI_DisplaySmallest(String, 0, 1, true, true);
 
@@ -1644,6 +1664,11 @@ static void DrawF(uint32_t f)
 {
     f = NormalizeScanFrequency(f);
     FormatFrequency(f, String);
+#ifdef ENABLE_TEAM_MODE
+    // SAR-TEAM uses a field-readable K1 layout: one unambiguous peak
+    // frequency across the full first row, without modulation/BW collisions.
+    UI_PrintStringSmallNormal(String, 0, 127, 0);
+#else
     // Align frequency with channel name in status bar (both at x=43).
     // Left-aligned (End == Start = 43) so it does not collide with BW at x=108.
     UI_PrintStringSmallNormal(String, 43, 43, 0);
@@ -1652,6 +1677,7 @@ static void DrawF(uint32_t f)
     GUI_DisplaySmallest(String, 116, 1, false, true);
     sprintf(String, "%4sk", bwOptions[settings.listenBw]);
     GUI_DisplaySmallest(String, 108, 7, false, true);
+#endif
 
 #ifdef ENABLE_FEAT_F4HWN_SPECTRUM
     ShowChannelName(f);
@@ -1660,6 +1686,16 @@ static void DrawF(uint32_t f)
 
 static void DrawNums()
 {
+#ifdef ENABLE_TEAM_MODE
+    // The original three-field footer overlaps on the K1 128x64 LCD. Keep
+    // only the parameters needed during a field sweep; the peak frequency is
+    // already shown above the graph.
+    sprintf(String, "%u.%02uk %ux %s", GetScanStep() / 100,
+            GetScanStep() % 100, GetStepsCount(),
+            bwOptions[settings.listenBw]);
+    UI_PrintStringSmallNormal(String, 0, 127, 6);
+    return;
+#endif
 
     if (currentState == SPECTRUM)
     {
@@ -1937,6 +1973,35 @@ static void OnKeyDownFreqInput(KEY_Code_t key)
 }
 
 static void OnKeyDownStill(KEY_Code_t key) {
+#ifdef ENABLE_TEAM_MODE
+    if (sarSimpleMode)
+    {
+        switch (key)
+        {
+        case KEY_PTT:
+            // Safety: PTT never transmits in SAR mode. It only clears peak.
+            sarPeakRssi = rssiSmoothed;
+            sarMissingSamples = 0;
+            redrawScreen = true;
+            break;
+        case KEY_5:
+            FreqInput();
+            break;
+        case KEY_MENU:
+            sarSimpleMode = false;
+            monitorMode = false;
+            SetState(SPECTRUM);
+            RearmRuntimeState();
+            break;
+        case KEY_EXIT:
+            DeInitSpectrum();
+            break;
+        default:
+            break;
+        }
+        return;
+    }
+#endif
     switch (key)
     {
     case KEY_UP:
@@ -1999,6 +2064,45 @@ static void RenderSpectrum()
 
 static void RenderStill()
 {
+#ifdef ENABLE_TEAM_MODE
+    if (sarSimpleMode)
+    {
+        int dbm = Rssi2DBm(rssiSmoothed);
+        int peakDbm = Rssi2DBm(sarPeakRssi);
+        uint16_t margin = (rssiSmoothed > sarNoiseFloor)
+                              ? rssiSmoothed - sarNoiseFloor : 0;
+        uint8_t width = margin >= 64 ? 124 : (uint8_t)(margin * 124 / 64);
+        const char *state;
+
+        if (sarCalibrationSamples < SAR_CALIBRATION_SAMPLES)
+            state = "CALIBRATING";
+        else if (margin >= SAR_TARGET_MARGIN)
+            state = (dbm >= -72) ? "TOO CLOSE" : "TARGET";
+        else if (sarMissingSamples < SAR_LOST_SAMPLES)
+            state = "WAIT";
+        else
+            state = "NO SIGNAL";
+
+        sprintf(String, "%lu.%05lu MHz", currentFreq / 100000,
+                currentFreq % 100000);
+        UI_PrintStringSmallBold(String, 2, 126, 0);
+        UI_PrintStringSmallBold(state, 2, 126, 1);
+
+        sprintf(String, "NOW %d   PEAK %d dBm", dbm, peakDbm);
+        GUI_DisplaySmallest(String, 2, 18, false, true);
+
+        // A large, glanceable strength bar occupies three complete rows.
+        for (uint8_t row = 3; row <= 5; row++)
+        {
+            gFrameBuffer[row][1] = 0xFF;
+            gFrameBuffer[row][126] = 0xFF;
+            for (uint8_t x = 3; x < 125; x++)
+                gFrameBuffer[row][x] = (x <= width) ? 0xFF : 0x00;
+        }
+        GUI_DisplaySmallest("MENU:SCOPE   EXIT:BACK", 2, 50, false, true);
+        return;
+    }
+#endif
     DrawF(fMeasure);
 
     const uint8_t METER_PAD_LEFT = 3;
@@ -2335,6 +2439,37 @@ static void UpdateScan()
     FinalizeCompletedSweep();
 }
 
+#ifdef ENABLE_TEAM_MODE
+static void UpdateSarMetrics(uint16_t rssi)
+{
+    if (!sarSimpleMode)
+        return;
+
+    if (sarCalibrationSamples < SAR_CALIBRATION_SAMPLES)
+    {
+        sarNoiseFloor = sarCalibrationSamples
+                            ? (uint16_t)((sarNoiseFloor * 3 + rssi) >> 2)
+                            : rssi;
+        sarCalibrationSamples++;
+        // Ignore receiver-settling spikes. Start peak hold only after the
+        // automatic noise calibration has completed.
+        if (sarCalibrationSamples == SAR_CALIBRATION_SAMPLES)
+            sarPeakRssi = rssi;
+    }
+    else if (rssi < sarNoiseFloor + SAR_TARGET_MARGIN)
+    {
+        sarNoiseFloor = (uint16_t)((sarNoiseFloor * 31 + rssi) >> 5);
+    }
+
+    if (sarCalibrationSamples >= SAR_CALIBRATION_SAMPLES && rssi > sarPeakRssi)
+        sarPeakRssi = rssi;
+    if (rssi >= sarNoiseFloor + SAR_TARGET_MARGIN)
+        sarMissingSamples = 0;
+    else if (sarMissingSamples < 0xFFFF)
+        sarMissingSamples++;
+}
+#endif
+
 static void UpdateStill()
 {
     Measure();
@@ -2345,6 +2480,9 @@ static void UpdateStill()
     // EMA α=0.25 for display only; seed on first sample
     rssiSmoothed = rssiSmoothed ? (rssiSmoothed * 3 + scanInfo.rssi) >> 2
                                 : scanInfo.rssi;
+#ifdef ENABLE_TEAM_MODE
+    UpdateSarMetrics(scanInfo.rssi);
+#endif
     AutoTriggerLevel();
 
     if (IsPeakOverOpenLevel() || monitorMode) {
@@ -2408,6 +2546,9 @@ static void UpdateListening()
     peak.rssi = scanInfo.rssi;
     rssiSmoothed = rssiSmoothed ? (rssiSmoothed * 3 + scanInfo.rssi) >> 2
                                 : scanInfo.rssi;
+#ifdef ENABLE_TEAM_MODE
+    UpdateSarMetrics(scanInfo.rssi);
+#endif
     redrawScreen = true;
     redrawStatus = true;
 
@@ -2546,7 +2687,7 @@ static void Tick()
         renderPage = 0;
 }
 
-void APP_RunSpectrum()
+static void RunSpectrum(bool startInSarMode)
 {
     settings.backlightState = gEeprom.BACKLIGHT_TIME == 0 ? false : true;
 
@@ -2555,6 +2696,15 @@ void APP_RunSpectrum()
 #ifdef ENABLE_FEAT_F4HWN_SPECTRUM
     LoadSettings();
 #endif
+    // SAR starts on the selected receive frequency. Bandscope starts with the
+    // selected receive frequency in the middle of its sweep.
+#ifdef ENABLE_TEAM_MODE
+    sarSimpleMode = startInSarMode;
+    if (startInSarMode)
+        currentFreq = initialFreq = gTxVfo->pRX->Frequency;
+    else
+#endif
+    {
     // set the current frequency in the middle of the display
 #ifdef ENABLE_SCAN_RANGES
     if (gScanRangeStart)
@@ -2575,6 +2725,9 @@ void APP_RunSpectrum()
         #ifdef ENABLE_FEAT_F4HWN_RESUME_STATE
             gEeprom.CURRENT_STATE = 4;
         #endif
+#ifdef ENABLE_SCAN_RANGES
+    }
+#endif
     }
 
     #ifdef ENABLE_FEAT_F4HWN_RESUME_STATE
@@ -2604,6 +2757,20 @@ void APP_RunSpectrum()
 
     RearmRuntimeState();
 
+#ifdef ENABLE_TEAM_MODE
+    if (sarSimpleMode)
+    {
+        sarNoiseFloor = 0;
+        sarPeakRssi = 0;
+        sarCalibrationSamples = 0;
+        sarMissingSamples = SAR_LOST_SAMPLES;
+        monitorMode = true;
+        SetState(STILL);
+        SetF(currentFreq);
+        newScanStart = false;
+    }
+#endif
+
     isInitialized = true;
 
     while (isInitialized)
@@ -2613,3 +2780,15 @@ void APP_RunSpectrum()
 
     BACKLIGHT_TurnOn();
 }
+
+void APP_RunSpectrum(void)
+{
+    RunSpectrum(false);
+}
+
+#ifdef ENABLE_TEAM_MODE
+void APP_RunSar(void)
+{
+    RunSpectrum(true);
+}
+#endif
