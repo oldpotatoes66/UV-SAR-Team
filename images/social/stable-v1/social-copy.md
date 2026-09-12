@@ -19,7 +19,7 @@ https://sar.trailspud.com/
 
 安全提示：请遵守当地频率、呼号和发射规定；本项目不能作为唯一救援通信、定位或生命安全设备。
 
-作者：BH1JID  
+作者：BH1JID
 联系：oldpotatoes66@gmail.com
 
 ## English social copy
@@ -41,7 +41,7 @@ Free to use, learn, test, and contribute.
 
 Safety: follow local frequency, callsign, power, and transmission rules. This project must never be the sole rescue communication, location, or life-safety system.
 
-Author: BH1JID  
+Author: BH1JID
 Contact: oldpotatoes66@gmail.com
 
 ## Suggested tags

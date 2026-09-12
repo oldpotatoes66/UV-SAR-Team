@@ -1,7 +1,7 @@
 # UV-SAR-TEAM stable release / 正式版发布
 
-Release bundle: `v1.1`  
-UV-K1 firmware: `v1.0`  
+Release bundle: `v1.1`
+UV-K1 firmware: `v1.0`
 UV-K5 / UV-K6 firmware: `v1.1`
 
 ## 中文
