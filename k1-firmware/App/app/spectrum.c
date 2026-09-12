@@ -76,6 +76,9 @@ static uint16_t sarNoiseFloor = 0;
 static uint16_t sarPeakRssi = 0;
 static uint8_t sarCalibrationSamples = 0;
 static uint16_t sarMissingSamples = 0;
+static int sarLastDbm = -160;
+static int8_t sarTrend = 0;
+static uint8_t sarTrendCounter = 0;
 #define SAR_CALIBRATION_SAMPLES 20
 #define SAR_TARGET_MARGIN       16
 #define SAR_LOST_SAMPLES        10
@@ -1556,9 +1559,16 @@ static void BuildCurrentSpectrumTopY(uint8_t *topY)
 
 static void DrawStatus()
 {
+    bool statusRendered = false;
 #ifdef ENABLE_TEAM_MODE
     if (sarSimpleMode)
-        sprintf(String, "SAR FIND");
+    {
+        sprintf(String, "%lu.%05lu", currentFreq / 100000,
+                currentFreq % 100000);
+        GUI_DisplaySmallest(String, 0, 1, true, true);
+        GUI_DisplaySmallest("MUTE", 72, 1, true, true);
+        statusRendered = true;
+    }
     else
         sprintf(String, "BS %s", manualSetFlag ? "MAN" : "AUTO");
 #else
@@ -1587,7 +1597,8 @@ static void DrawStatus()
     }
 #endif
     
-    GUI_DisplaySmallest(String, 0, 1, true, true);
+    if (!statusRendered)
+        GUI_DisplaySmallest(String, 0, 1, true, true);
 
     BOARD_ADC_GetBatteryInfo(&gBatteryVoltages[gBatteryCheckCounter++ % 4],
                              &gBatteryCurrent);
@@ -2071,35 +2082,46 @@ static void RenderStill()
         int peakDbm = Rssi2DBm(sarPeakRssi);
         uint16_t margin = (rssiSmoothed > sarNoiseFloor)
                               ? rssiSmoothed - sarNoiseFloor : 0;
-        uint8_t width = margin >= 64 ? 124 : (uint8_t)(margin * 124 / 64);
+        int score = clamp((dbm + 120) * 100 / 80, 0, 100);
+        uint8_t width = (uint8_t)(score * 118 / 100);
         const char *state;
 
         if (sarCalibrationSamples < SAR_CALIBRATION_SAMPLES)
-            state = "CALIBRATING";
+            state = "CAL";
         else if (margin >= SAR_TARGET_MARGIN)
             state = (dbm >= -72) ? "TOO CLOSE" : "TARGET";
         else if (sarMissingSamples < SAR_LOST_SAMPLES)
             state = "WAIT";
         else
-            state = "NO SIGNAL";
+            state = "LOST";
 
-        sprintf(String, "%lu.%05lu MHz", currentFreq / 100000,
-                currentFreq % 100000);
-        UI_PrintStringSmallBold(String, 2, 126, 0);
-        UI_PrintStringSmallBold(state, 2, 126, 1);
+        sprintf(String, "%s %d%%", state, score);
+        UI_PrintStringSmallBold(String, 0, 127, 0);
 
-        sprintf(String, "NOW %d   PEAK %d dBm", dbm, peakDbm);
-        GUI_DisplaySmallest(String, 2, 18, false, true);
+        sprintf(String, "%4d", dbm);
+        UI_DisplayFrequency(String, 24, 1, false);
+        UI_PrintStringSmallBold("dBm", 91, 127, 2);
 
-        // A large, glanceable strength bar occupies three complete rows.
-        for (uint8_t row = 3; row <= 5; row++)
-        {
-            gFrameBuffer[row][1] = 0xFF;
-            gFrameBuffer[row][126] = 0xFF;
-            for (uint8_t x = 3; x < 125; x++)
-                gFrameBuffer[row][x] = (x <= width) ? 0xFF : 0x00;
+        UI_DrawRectangleBuffer(gFrameBuffer, 3, 27, 124, 43, true);
+        for (uint8_t x = 0; x < width; x++)
+            UI_DrawLineBuffer(gFrameBuffer, 5 + x, 29, 5 + x, 41, true);
+
+        // Direction cue: up = getting stronger, down = weaker, right = steady.
+        if (sarTrend > 0) {
+            UI_DrawLineBuffer(gFrameBuffer, 8, 54, 16, 46, true);
+            UI_DrawLineBuffer(gFrameBuffer, 16, 46, 24, 54, true);
+            UI_DrawLineBuffer(gFrameBuffer, 16, 46, 16, 55, true);
+        } else if (sarTrend < 0) {
+            UI_DrawLineBuffer(gFrameBuffer, 8, 47, 16, 55, true);
+            UI_DrawLineBuffer(gFrameBuffer, 16, 55, 24, 47, true);
+            UI_DrawLineBuffer(gFrameBuffer, 16, 46, 16, 55, true);
+        } else {
+            UI_DrawLineBuffer(gFrameBuffer, 8, 51, 24, 51, true);
+            UI_DrawLineBuffer(gFrameBuffer, 20, 47, 24, 51, true);
+            UI_DrawLineBuffer(gFrameBuffer, 20, 55, 24, 51, true);
         }
-        GUI_DisplaySmallest("MENU:SCOPE   EXIT:BACK", 2, 50, false, true);
+        sprintf(String, "PK %d", peakDbm);
+        UI_PrintStringSmallBold(String, 34, 90, 6);
         return;
     }
 #endif
@@ -2467,6 +2489,15 @@ static void UpdateSarMetrics(uint16_t rssi)
         sarMissingSamples = 0;
     else if (sarMissingSamples < 0xFFFF)
         sarMissingSamples++;
+
+    if (++sarTrendCounter >= 5)
+    {
+        int dbm = Rssi2DBm(rssiSmoothed);
+        int delta = dbm - sarLastDbm;
+        sarTrend = delta >= 3 ? 1 : (delta <= -3 ? -1 : 0);
+        sarLastDbm = dbm;
+        sarTrendCounter = 0;
+    }
 }
 #endif
 
@@ -2485,7 +2516,14 @@ static void UpdateStill()
 #endif
     AutoTriggerLevel();
 
-    if (IsPeakOverOpenLevel() || monitorMode) {
+    // SAR direction finding needs RSSI only.  Never route demodulated receiver
+    // audio to the speaker here; it creates loud open-squelch noise on K1.
+#ifdef ENABLE_TEAM_MODE
+    if (!sarSimpleMode && (IsPeakOverOpenLevel() || monitorMode))
+#else
+    if (IsPeakOverOpenLevel() || monitorMode)
+#endif
+    {
         ToggleRX(true);
     }
 }
@@ -2764,7 +2802,11 @@ static void RunSpectrum(bool startInSarMode)
         sarPeakRssi = 0;
         sarCalibrationSamples = 0;
         sarMissingSamples = SAR_LOST_SAMPLES;
-        monitorMode = true;
+        sarLastDbm = -160;
+        sarTrend = 0;
+        sarTrendCounter = 0;
+        monitorMode = false;
+        ToggleRX(false);
         SetState(STILL);
         SetF(currentFreq);
         newScanStart = false;
