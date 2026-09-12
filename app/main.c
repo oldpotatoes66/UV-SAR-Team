@@ -32,6 +32,7 @@
 #endif
 
 #ifdef ENABLE_TEAM_MODE
+#include "app/beacon.h"
 #include "app/team.h"
 #endif
 
@@ -268,6 +269,13 @@ static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
             break;
 
         case KEY_7:
+#ifdef ENABLE_TEAM_MODE
+            if (beep) {
+                BEACON_Run();
+                gRequestDisplayScreen = DISPLAY_MAIN;
+                break;
+            }
+#endif
 #ifdef ENABLE_VOX
             ACTION_Vox();
 //#else

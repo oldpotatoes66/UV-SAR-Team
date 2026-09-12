@@ -285,13 +285,13 @@ static bool TEAM_DelayCanExit(uint16_t delayMs)
     return true;
 }
 
-static bool TEAM_TransmitPoll(uint8_t dcsCode, uint32_t frequency,
-                              uint8_t txBias)
+bool TEAM_TransmitCarrier(uint8_t dcsCode, uint32_t frequency,
+                          uint8_t txBias, uint16_t durationTicks)
 {
     TEAM_BeginTransmit(frequency, txBias);
     BK4819_SetCDCSSCodeWord(DCS_GetGolayCodeWord(CODE_TYPE_DIGITAL, dcsCode));
 
-    for (uint8_t ticks = 0; ticks < TEAM_TX_DURATION_TICKS; ticks++) {
+    for (uint16_t ticks = 0; ticks < durationTicks; ticks++) {
         if (KEYBOARD_Poll() == KEY_EXIT) {
             TEAM_EndTransmit(dcsCode);
             return false;
@@ -342,8 +342,8 @@ static const char *TEAM_MorseCode(char c)
     return 0;
 }
 
-static bool TEAM_TransmitCwId(uint8_t dcsCode, uint32_t frequency,
-                              uint8_t txBias, const char *id)
+bool TEAM_TransmitCwId(uint8_t dcsCode, uint32_t frequency,
+                       uint8_t txBias, const char *id)
 {
     TEAM_BeginTransmit(frequency, txBias);
     BK4819_TransmitTone(false, 700);
@@ -374,6 +374,15 @@ static bool TEAM_TransmitCwId(uint8_t dcsCode, uint32_t frequency,
 aborted:
     TEAM_EndTransmit(dcsCode);
     return false;
+}
+
+bool TEAM_GetConfiguredCallSign(char callSign[7])
+{
+    const TEAM_Config_t config = TEAM_LoadConfig();
+    if (!config.valid)
+        return false;
+    memcpy(callSign, config.callSign, sizeof(config.callSign));
+    return true;
 }
 
 void TEAM_Run(void)
@@ -595,7 +604,8 @@ void TEAM_Run(void)
                             frequency, autoTx, transmitting, txAllowed,
                             txCountdown, txInterval, powerLevel, alertSound,
                             cwEnabled, cwTransmitting, &config);
-                if (!TEAM_TransmitPoll(dcsCode, frequency, txBias))
+                if (!TEAM_TransmitCarrier(dcsCode, frequency, txBias,
+                                          TEAM_TX_DURATION_TICKS))
                     break;
                 transmitting = false;
                 carrierTicks = 0xFFFF;

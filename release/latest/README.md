@@ -4,10 +4,10 @@ The exact source commit and build time are recorded in `BUILD-INFO.txt`.
 
 准确的源码提交和编译时间记录在 `BUILD-INFO.txt` 中。
 
-| Radio / 电台 | MCU | Firmware / 固件 |
-|---|---|---|
-| UV-K5 / UV-K6 | DP32G030 | `SAR-TEAM-K5-K6-DP32G030.packed.bin` |
-| UV-K1 | PY32F071 | `SAR-TEAM-K1-PY32F071.bin` |
+| Radio / 电台 | MCU | Version / 版本 | Firmware / 固件 |
+|---|---|---|---|
+| UV-K5 / UV-K6 | DP32G030 | v1.1 | `SAR-TEAM-K5-K6-DP32G030.packed.bin` |
+| UV-K1 | PY32F071 | v1.0 | `SAR-TEAM-K1-PY32F071.bin` |
 
 **Never flash one model's binary onto the other model.** Verify the SHA-256 value in `SHA256SUMS` before flashing.
 

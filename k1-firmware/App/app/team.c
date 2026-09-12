@@ -279,7 +279,7 @@ static const char *TEAM_MorseCode(const char c)
     return 0;
 }
 
-static bool TEAM_TransmitCwId(const uint8_t dcsCode, const char *id)
+bool TEAM_TransmitCwId(const uint8_t dcsCode, const char *id)
 {
     TEAM_BeginTransmit(dcsCode);
     BK4819_TransmitTone(false, 700);
@@ -308,6 +308,15 @@ static bool TEAM_TransmitCwId(const uint8_t dcsCode, const char *id)
 aborted:
     TEAM_EndTransmit(dcsCode);
     return false;
+}
+
+bool TEAM_GetConfiguredCallSign(char callSign[7])
+{
+    const TEAM_Config_t config = TEAM_LoadConfig();
+    if (!config.valid)
+        return false;
+    memcpy(callSign, config.callSign, sizeof(config.callSign));
+    return true;
 }
 
 static bool TEAM_PlayAlert(const bool recovered, const uint8_t dcsCode,

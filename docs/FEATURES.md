@@ -22,17 +22,20 @@ This is the canonical list of currently verified behavior. K5/K6 use the DP32G03
 | 长按 `F` 锁定 TEAM 配置键，PTT/EXIT 保留 | ✓ | ✓ |
 | EEPROM 呼号、CRC-8、备份和写后复读 | ✓ | ✓ |
 | CSV 呼号名册和跨机型频道 CSV | ✓ | ✓ |
+| `F+7` 独立测向训练信标 / direction-finding training beacon | ✓ | ✓ |
 
 ## 主界面快捷键 / Main-screen shortcuts
 
 - `F+5`：进入 SAR 测向；SAR 内 PTT 不发射，只重置峰值。
 - 长按裸键 `6`：进入 TEAM。不要先按 `F`。
 - `F+6`：调整当前发送 VFO 的普通发射功率，不进入 TEAM。
+- `F+7`：进入独立测向训练信标；`MENU` 启停，`EXIT` 退出。
 - K1 会显示约 1.5 秒的 `TX POWER` 大字确认，并在 A、B 两个 VFO 行持续显示各自的 `L1–L5 / M / H`。
 
 - `F+5`: enter SAR direction finding. PTT is transmit-inhibited in SAR and resets the peak only.
 - Hold bare `6`: enter TEAM. Do not press `F` first.
 - `F+6`: change normal transmit power for the selected TX VFO; it does not enter TEAM.
+- `F+7`: open the independent direction-finding training beacon; `MENU` starts/stops and `EXIT` leaves.
 - K1 shows a roughly 1.5-second `TX POWER` confirmation and permanently shows each A/B VFO power as `L1–L5 / M / H`.
 
 ## TEAM 按键 / TEAM controls
@@ -58,7 +61,9 @@ K1 v0.5 keeps `PWR L1–L5/M/H` in a dedicated fixed position on the TEAM screen
 
 K1 v0.6 uses the same non-overlapping TEAM information layout as K5/K6: callsign/battery, DCS/RSSI, persistent `PWR L1–L5/M/H`/poll settings, and link age/exit state.
 
-K5/K6 v1.0RC2 reorganizes the TEAM screen into fixed, non-overlapping fields: callsign/battery, DCS/RSSI, persistent `PWR P1–P3`/poll settings, and link age/exit state.
+K5/K6 v1.1 and K1 v1.0 are the first stable builds with the same practical SAR core: voice plus ARTS, persistent power display, SAR direction finding, Bandscope, and an independent training beacon. The beacon identifies with the configured callsign, transmits for 3 seconds every 30 seconds at the lowest training power, avoids busy channels, blocks low-battery/invalid-frequency transmission, and stops after 30 minutes.
+
+K5/K6 v1.1 与 K1 v1.0 是首批稳定版本，具备相同的实用 SAR 核心：语音与 ARTS、常驻功率显示、SAR 测向、Bandscope，以及独立测向训练信标。信标使用已配置呼号标识，每 30 秒以最低训练功率发射 3 秒，支持忙信道避让、低电量与非法频率禁发，并在 30 分钟后自动停止。
 
 ## 配置与频道 / Configuration and channels
 

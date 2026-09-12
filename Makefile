@@ -112,6 +112,8 @@ override ENABLE_FEAT_F4HWN_NARROWER      := 0
 override ENABLE_FEAT_F4HWN_INV           := 0
 override ENABLE_FEAT_F4HWN_CTR           := 0
 override ENABLE_FEAT_F4HWN_CA            := 0
+override ENABLE_AM_FIX                   := 0
+override ENABLE_WIDE_RX                  := 0
 endif
 
 ifeq ($(ENABLE_FEAT_F4HWN),1)
@@ -197,6 +199,7 @@ OBJS += app/spectrum.o
 endif
 ifeq ($(ENABLE_TEAM_MODE), 1)
 OBJS += app/team.o
+OBJS += app/beacon.o
 endif
 ifeq ($(ENABLE_FEAT_F4HWN_SCREENSHOT), 1)
 OBJS += screenshot.o

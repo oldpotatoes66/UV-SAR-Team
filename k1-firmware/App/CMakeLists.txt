@@ -170,6 +170,7 @@ enable_feature(ENABLE_BLMIN_TMP_OFF)
 enable_feature(ENABLE_SCAN_RANGES)
 enable_feature(ENABLE_TEAM_MODE
     app/team.c
+    app/beacon.c
 )
 
 # ---- CONTRIB MODS ----

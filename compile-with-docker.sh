@@ -157,7 +157,7 @@ sarteam() {
         rm -f ./compiled-firmware/f4hwn.sar-team* && cd /app && make -s \
         SAR_TEAM_BUILD=1 \
         AUTHOR_STRING_2=BH1JID \
-        VERSION_STRING_2=v1.0RC2 \
+        VERSION_STRING_2=v1.1 \
         EDITION_STRING=SAR-TEAM \
         TARGET=f4hwn.sar-team \
         && cp f4hwn.sar-team* compiled-firmware/"
